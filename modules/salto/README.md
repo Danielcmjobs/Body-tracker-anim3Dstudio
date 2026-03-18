@@ -1,6 +1,6 @@
 # Módulo 2 — Cálculo de Altura de Salto
 
-Parte del proyecto **proyecto-medicion**. Calculará la altura de un salto vertical usando los sensores del móvil (acelerómetro / giroscopio).
+Parte del proyecto **body-tracking-anim3d**. Calculará la altura de un salto vertical usando los sensores del móvil (acelerómetro / giroscopio).
 
 > **Fase 2 — No iniciado.** Se abordará tras completar la Fase 1 (módulo sensor).
 

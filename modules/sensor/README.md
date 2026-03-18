@@ -1,6 +1,6 @@
 ﻿# Módulo 1 — Sensor de Distancia HC-SR04
 
-Parte del proyecto **proyecto-medicion**. Este módulo es autónomo: puede arrancarse, probarse y demostrarse sin depender del resto del proyecto.
+Parte del proyecto **body-traking-anim3d**. Este módulo es autónomo: puede arrancarse, probarse y demostrarse sin depender del resto del proyecto.
 
 ## Estructura
 
