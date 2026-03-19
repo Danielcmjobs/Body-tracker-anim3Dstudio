@@ -48,7 +48,7 @@ class CalculoService:
         (60 % píxeles — más fiable con buena detección —, 40 % cinemática).
         Si solo uno está disponible, usa ese.
         """
-        despegue, aterrizaje, confianza = self._detectar_vuelo(frames)
+        despegue, aterrizaje, confianza = self._detectar_vuelo(frames, "vertical")
 
         if despegue is None or aterrizaje is None:
             return ResultadoSalto(
@@ -121,7 +121,7 @@ class CalculoService:
         Usa la altura del usuario en metros (altura_real_m) y la altura
         medida en píxeles para calcular el factor de escala.
         """
-        despegue, aterrizaje, confianza = self._detectar_vuelo(frames)
+        despegue, aterrizaje, confianza = self._detectar_vuelo(frames, "horizontal")
 
         if despegue is None or aterrizaje is None:
             return ResultadoSalto(
@@ -158,6 +158,7 @@ class CalculoService:
             )
 
         desplazamiento_px = abs(x_aterrizaje - x_despegue)
+        print(f"DEBUG - X Despegue: {x_despegue}, X Aterrizaje: {x_aterrizaje}, DesplazPx: {desplazamiento_px}")
 
         # D_real = Dp * S  →  en metros, convertir a cm
         distancia_m = desplazamiento_px * factor_escala
@@ -174,18 +175,12 @@ class CalculoService:
             tiempo_vuelo_s=round(tiempo_vuelo, 4),
         )
 
-    def _detectar_vuelo(self, frames: list[FramePies]) -> tuple[int | None, int | None, float]:
+    def _detectar_vuelo(self, frames: list[FramePies], tipo_salto: str) -> tuple[int | None, int | None, float]:
         """
         Detecta los frames de despegue y aterrizaje usando la derivada
-        de la coordenada Y del talón.
-
-        En vídeo, Y crece hacia abajo → cuando el pie sube, Y disminuye.
-        Despegue:    derivada negativa grande (Y cae bruscamente)
-        Aterrizaje:  derivada positiva grande (Y sube bruscamente)
-
-        Devuelve (frame_despegue, frame_aterrizaje, confianza).
+        de la coordenada Y, aplicando suavizado de señal (media móvil)
+        para tolerar ruido e imprecisiones de MediaPipe.
         """
-        # Extraer la coordenada Y promedio de ambos talones por frame
         y_talones = []
         for f in frames:
             if f.talon_izq_y is not None and f.talon_der_y is not None:
@@ -197,36 +192,44 @@ class CalculoService:
             else:
                 y_talones.append(None)
 
-        # Sustituir Nones con interpolación lineal para calcular derivada
         y_array = self._interpolar_nones(y_talones)
         if y_array is None or len(y_array) < 3:
             return None, None, 0.0
 
-        # Derivada (diferencia entre frames consecutivos)
-        derivada = np.diff(y_array)
+        # 1. Filtro de suavizado (Media móvil de 3 fotogramas)
+        # Elimina las micro-vibraciones antes de buscar el despegue
+        kernel = np.ones(3) / 3
+        y_suave = np.convolve(y_array, kernel, mode='same')
 
-        # Despegue: primer punto donde la derivada es muy negativa (pie sube)
+        # 2. Cálculo de la derivada sobre la señal limpia
+        derivada = np.diff(y_suave)
+        umbral = UMBRAL_DERIVADA_Y if tipo_salto == "vertical" else UMBRAL_DERIVADA_Y * 0.3
+
         despegue = None
-        for i, d in enumerate(derivada):
-            if d < -UMBRAL_DERIVADA_Y:
-                despegue = i
-                break
-
-        if despegue is None:
-            return None, None, 0.0
-
-        # Aterrizaje: primer punto después del despegue donde la derivada
-        # es muy positiva (pie baja) y luego se estabiliza
         aterrizaje = None
-        for i in range(despegue + 1, len(derivada)):
-            if derivada[i] > UMBRAL_DERIVADA_Y:
-                aterrizaje = i + 1  # +1 porque derivada[i] es entre frame i e i+1
-                break
+        
+        # Margen ciego: Un salto humano tiene una fase de ascenso ininterrumpida.
+        # Se ignoran los falsos aterrizajes durante los primeros 5 frames tras el despegue.
+        MIN_FRAMES = 5 
 
-        if aterrizaje is None:
+        # 3. Búsqueda robusta
+        for i in range(len(derivada)):
+            if derivada[i] < -umbral:
+                # Se ha encontrado un despegue. 
+                # Buscar el aterrizaje empezando 'MIN_FRAMES' después del despegue.
+                for j in range(i + MIN_FRAMES, len(derivada)):
+                    if derivada[j] > umbral:
+                        despegue = i
+                        aterrizaje = j + 1
+                        break
+                
+                # Si se encuentra un ciclo completo válido, detener la búsqueda global
+                if despegue is not None and aterrizaje is not None:
+                    break
+
+        if despegue is None or aterrizaje is None:
             return None, None, 0.0
 
-        # Confianza basada en cuántos frames tienen detección válida
         frames_vuelo = frames[despegue:aterrizaje + 1]
         detectados = sum(1 for f in frames_vuelo if f.talon_izq_y is not None)
         confianza = detectados / len(frames_vuelo) if frames_vuelo else 0.0

@@ -67,6 +67,7 @@ class VideoProcessor:
         options = PoseLandmarkerOptions(
             base_options=BaseOptions(model_asset_path=_MODEL_PATH),
             running_mode=RunningMode.VIDEO,
+            num_poses=2,
             min_pose_detection_confidence=MIN_DETECTION_CONFIDENCE,
             min_tracking_confidence=MIN_TRACKING_CONFIDENCE,
         )
@@ -123,33 +124,38 @@ class VideoProcessor:
         return frames, info
 
     def _extraer_pies(self, resultado, idx: int, fps: float, alto: int, ancho: int) -> FramePies:
-        """Extrae las coordenadas de los pies de un resultado de PoseLandmarker."""
+        """Extrae las coordenadas de la persona más grande detectada en pantalla, filtrando reflejos."""
         if not resultado.pose_landmarks or len(resultado.pose_landmarks) == 0:
             return FramePies(
-                frame_idx=idx,
-                timestamp_s=idx / fps if fps > 0 else 0,
-                talon_izq_y=None, talon_der_y=None,
-                punta_izq_y=None, punta_der_y=None,
-                talon_izq_x=None, talon_der_x=None,
-                punta_izq_x=None, punta_der_x=None,
+                frame_idx=idx, timestamp_s=idx / fps if fps > 0 else 0,
+                talon_izq_y=None, talon_der_y=None, punta_izq_y=None, punta_der_y=None,
+                talon_izq_x=None, talon_der_x=None, punta_izq_x=None, punta_der_x=None,
                 altura_persona_px=None,
             )
 
-        # PoseLandmarker devuelve lista de personas; tomamos la primera
-        lm = resultado.pose_landmarks[0]
+        # Buscar la silueta más grande (la persona real frente a la cámara)
+        mejor_lm = None
+        max_altura = 0
 
-        # Coordenadas en píxeles (landmarks normalizados 0-1)
+        for pose in resultado.pose_landmarks:
+            def temp_y(i): return pose[i].y * alto
+            cabeza_y = temp_y(0)
+            pie_bajo_y = max(temp_y(LANDMARK_TALON_IZQ), temp_y(LANDMARK_TALON_DER),
+                             temp_y(LANDMARK_PUNTA_IZQ), temp_y(LANDMARK_PUNTA_DER))
+            altura_actual = abs(pie_bajo_y - cabeza_y)
+
+            if altura_actual > max_altura:
+                max_altura = altura_actual
+                mejor_lm = pose
+
+        lm = mejor_lm
+        altura_px = max_altura
+
         def px_y(i: int) -> float:
             return lm[i].y * alto
 
         def px_x(i: int) -> float:
             return lm[i].x * ancho
-
-        # Altura de la persona: cabeza (landmark 0) a pie más bajo
-        cabeza_y = lm[0].y * alto
-        pie_bajo_y = max(px_y(LANDMARK_TALON_IZQ), px_y(LANDMARK_TALON_DER),
-                         px_y(LANDMARK_PUNTA_IZQ), px_y(LANDMARK_PUNTA_DER))
-        altura_px = abs(pie_bajo_y - cabeza_y)
 
         return FramePies(
             frame_idx=idx,
