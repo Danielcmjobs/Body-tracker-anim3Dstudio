@@ -103,3 +103,124 @@ body {
 #card-arduino {
     transition-delay: 0.15s;
 }
+
+
+
+/* --- VISTA DE CÁMARA (salto.html) --- */
+
+.salto-page {
+    justify-content: flex-start;
+    padding: 0;
+}
+
+.top-bar {
+    width: 100%;
+    padding: 1.5rem;
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    background: rgba(0, 0, 0, 0.2);
+    z-index: 10;
+}
+
+.back-button {
+    color: var(--text-light);
+    text-decoration: none;
+    font-weight: bold;
+}
+
+.camera-container {
+    position: relative;
+    width: 100%;
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    background-color: #000;
+}
+
+#vista-camara {
+    width: 100%;
+    height: 60vh;
+    object-fit: cover; /* Asegura que el vídeo ocupe todo el ancho sin deformarse */
+    border-radius: 0 0 20px 20px;
+}
+
+.camera-hud {
+    padding: 1.5rem;
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+    align-items: center;
+}
+
+.config-panel {
+    display: flex;
+    gap: 1rem;
+    width: 100%;
+    max-width: 400px;
+}
+
+.modern-input {
+    flex: 1;
+    padding: 0.8rem;
+    border-radius: 10px;
+    border: none;
+    background: rgba(255, 255, 255, 0.9);
+    color: var(--purple-dark);
+    font-weight: bold;
+    outline: none;
+}
+
+/* Botón de grabación animado */
+.record-btn {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 1rem 2rem;
+    border-radius: 50px;
+    border: none;
+    background: #ff3b30;
+    color: white;
+    font-size: 1.1rem;
+    font-weight: bold;
+    box-shadow: 0 4px 15px rgba(255, 59, 48, 0.4);
+    transition: all 0.3s ease;
+}
+
+.record-btn.recording {
+    background: #ff9500;
+    animation: pulse 1.5s infinite;
+}
+
+@keyframes pulse {
+    0% { transform: scale(1); box-shadow: 0 0 0 0 rgba(255, 149, 0, 0.7); }
+    70% { transform: scale(1.05); box-shadow: 0 0 0 15px rgba(255, 149, 0, 0); }
+    100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(255, 149, 0, 0); }
+}
+
+/* Panel de Resultados */
+.results-card {
+    position: absolute;
+    bottom: 0;
+    width: 100%;
+    background: rgba(255, 255, 255, 0.95);
+    color: var(--purple-dark);
+    padding: 2rem;
+    border-radius: 30px 30px 0 0;
+    text-align: center;
+    box-shadow: 0 -10px 30px rgba(0,0,0,0.2);
+    transform: translateY(100%); /* Oculto por debajo de la pantalla */
+    transition: transform 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+
+.results-card.show {
+    transform: translateY(0); /* Sube y se muestra */
+}
+
+#distancia-resultado {
+    font-size: 3.5rem;
+    background: linear-gradient(135deg, var(--purple-dark), var(--purple-light));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    margin-bottom: 0.5rem;
+}
