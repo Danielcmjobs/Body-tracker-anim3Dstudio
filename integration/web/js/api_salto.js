@@ -24,6 +24,7 @@ let escalaMetrosPorUnidad = 0;
 let yPicoVuelo = 1.0; 
 let despegueX = 0;
 let umbralDespegue = 0;
+let narizBaseY = 0;
 
 // Suavizado exponencial (EMA)
 const EMA_ALPHA = 0.4;
@@ -98,18 +99,20 @@ async function renderLoop() {
     }
 }
 
-// --- 3. ALGORITMO DE VUELO EN VIVO (HÍBRIDO) ---
+// --- 3. ALGORITMO DE VUELO EN VIVO (CORREGIDO) ---
 function calcularFaseSalto(landmarks) {
     const pieIzq = landmarks[27];
     const pieDer = landmarks[28];
+    const nariz = landmarks[0];
 
-    // Filtrar por visibilidad: si los pies no se ven bien, ignorar frame
-    if (pieIzq.visibility < MIN_VISIBILIDAD || pieDer.visibility < MIN_VISIBILIDAD) return;
+    const visIzq = pieIzq.visibility !== undefined ? pieIzq.visibility : 1.0;
+    const visDer = pieDer.visibility !== undefined ? pieDer.visibility : 1.0;
+
+    if (visIzq < MIN_VISIBILIDAD || visDer < MIN_VISIBILIDAD) return;
 
     const yPieRaw = (pieIzq.y + pieDer.y) / 2;
     const xPieRaw = (pieIzq.x + pieDer.x) / 2;
 
-    // Suavizado exponencial (EMA) para evitar jitter
     if (yPieSuavizado === null) {
         yPieSuavizado = yPieRaw;
         xPieSuavizado = xPieRaw;
@@ -118,17 +121,16 @@ function calcularFaseSalto(landmarks) {
         xPieSuavizado = EMA_ALPHA * xPieRaw + (1 - EMA_ALPHA) * xPieSuavizado;
     }
 
-    // Acumular visibilidad para confianza final
-    const visMedia = (pieIzq.visibility + pieDer.visibility) / 2;
+    const visMedia = (visIzq + visDer) / 2;
     sumaVisibilidad += visMedia;
     framesVisibilidad++;
 
-    // --- Fase de calibración (30 frames) ---
+    // --- Fase de calibración ---
     if (framesCalibracion < 30) {
         alturaBaseY += yPieSuavizado;
+        narizBaseY += nariz.y;
         framesCalibracion++;
 
-        // Feedback visual de calibración
         const progreso = Math.round((framesCalibracion / 30) * 100);
         indicador.style.display = '';
         indicador.textContent = `Calibrando... ${progreso}%`;
@@ -136,14 +138,16 @@ function calcularFaseSalto(landmarks) {
         
         if (framesCalibracion === 30) {
             const alturaRealMetros = parseFloat(document.getElementById('altura-usuario').value);
-            const narizY = landmarks[0].y;
             const posicionSueloNormal = alturaBaseY / 30;
-            const alturaPersonaNorm = posicionSueloNormal - narizY; 
+            const posicionNarizNormal = narizBaseY / 30;
             
-            escalaMetrosPorUnidad = alturaRealMetros / alturaPersonaNorm;
+            const alturaPersonaNormY = posicionSueloNormal - posicionNarizNormal; 
+            
+            const alturaPersonaPixels = alturaPersonaNormY * canvasElement.height;
+            escalaMetrosPorUnidad = alturaRealMetros / alturaPersonaPixels; 
 
-            // Umbral adaptativo: 30% de la altura normalizada de la persona
-            umbralDespegue = posicionSueloNormal - (alturaPersonaNorm * 0.06);
+            // Restaurar umbral al 6% para evitar falsos despegues por desplazamiento de peso
+            umbralDespegue = posicionSueloNormal - (alturaPersonaNormY * 0.06);
 
             indicador.textContent = '¡Listo! Salta';
             indicador.style.background = '#4caf50';
@@ -156,26 +160,26 @@ function calcularFaseSalto(landmarks) {
     
     if (estadoSalto === 'suelo' && yPieSuavizado < umbralDespegue) {
         estadoSalto = 'aire';
-        tiempoDespegue = performance.now();
-        despegueX = xPieSuavizado; 
-        yPicoVuelo = yPieSuavizado;
-        // Reiniciar contadores de confianza para medir solo durante el salto
+        tiempoDespegue = performance.now(); // Cronómetro estricto
+        despegueX = xPieRaw; 
+        yPicoVuelo = yPieRaw; 
         sumaVisibilidad = 0;
         framesVisibilidad = 0;
     } 
     else if (estadoSalto === 'aire') {
-        if (yPieSuavizado < yPicoVuelo) {
-            yPicoVuelo = yPieSuavizado;
+        if (yPieRaw < yPicoVuelo) {
+            yPicoVuelo = yPieRaw;
         }
 
         if (yPieSuavizado > umbralDespegue) {
             estadoSalto = 'suelo';
-            const tiempoAterrizaje = performance.now();
-            const aterrizajeX = xPieSuavizado;
+            const tiempoAterrizaje = performance.now(); 
+            const aterrizajeX = xPieRaw;
             
             const tiempoVueloSegundos = (tiempoAterrizaje - tiempoDespegue) / 1000;
             
-            if (tiempoVueloSegundos > 0.15) { 
+            // Incrementar filtro temporal a 0.2s para descartar vibraciones de cámara
+            if (tiempoVueloSegundos > 0.20) { 
                 const confianzaReal = framesVisibilidad > 0 ? sumaVisibilidad / framesVisibilidad : 0;
                 finalizarSaltoEnVivo(tiempoVueloSegundos, despegueX, aterrizajeX, posicionSueloNormal, yPicoVuelo, confianzaReal);
             }
@@ -195,15 +199,15 @@ function finalizarSaltoEnVivo(tiempoVuelo, startX, endX, ySuelo, yPico, confianz
         const alturaCinematicaM = (gravedad * Math.pow(tiempoVuelo, 2)) / 8;
         const alturaCinematicaCm = alturaCinematicaM * 100;
 
-        const desplazamientoNorm = ySuelo - yPico;
-        const alturaVisualM = desplazamientoNorm * escalaMetrosPorUnidad;
+        const pixelesDesplazadosY = (ySuelo - yPico) * canvasElement.height;
+        const alturaVisualM = pixelesDesplazadosY * escalaMetrosPorUnidad;
         const alturaVisualCm = alturaVisualM * 100;
 
         distanciaFinalCm = Math.round((0.6 * alturaVisualCm) + (0.4 * alturaCinematicaCm));
         textoTipo = 'Vertical';
     } else {
-        const distanciaUnidades = Math.abs(endX - startX);
-        const distanciaMetros = distanciaUnidades * escalaMetrosPorUnidad;
+        const pixelesDesplazadosX = Math.abs(endX - startX) * canvasElement.width;
+        const distanciaMetros = pixelesDesplazadosX * escalaMetrosPorUnidad;
         distanciaFinalCm = Math.round(distanciaMetros * 100);
         textoTipo = 'Horizontal';
     }
@@ -234,6 +238,7 @@ document.addEventListener('iniciarDeteccion', () => {
     estadoSalto = 'suelo';
     framesCalibracion = 0;
     alturaBaseY = 0;
+    narizBaseY = 0; // Reinicio crítico de la cabeza
     yPicoVuelo = 1.0;
     yPieSuavizado = null;
     xPieSuavizado = null;
