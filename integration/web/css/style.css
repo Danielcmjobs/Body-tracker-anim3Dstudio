@@ -1,9 +1,11 @@
-/* Variables de color y ajustes base para móviles */
+/* Variables de color corporativos extraídos de la web Anim3D - Ajustado para ser más claro */
 :root {
-    --purple-dark: #2a0845;
-    --purple-light: #6441A5;
+    --bg-dark: #221a2e; /* Fondo violeta oscuro más claro para mejor visibilidad */
+    --results-sheet-bg: #2a2139; /* Fondo del panel de resultados ligeramente distinto */
+    --purple-brand: #854cb5; /* Violeta corporativo de los botones */
     --text-light: #ffffff;
-    --text-muted: #e0e0e0;
+    --text-muted: #b0b0b0; /* Texto secundario ligeramente más claro */
+    --grid-color: rgba(255, 255, 255, 0.03); /* Líneas de la cuadrícula */
 }
 
 * {
@@ -11,16 +13,22 @@
     padding: 0;
     box-sizing: border-box;
     font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
-    -webkit-tap-highlight-color: transparent; /* Evita destellos azules en móviles */
+    -webkit-tap-highlight-color: transparent;
 }
 
 html, body {
     max-width: 100vw;
-    overflow-x: hidden; /* Corta cualquier elemento que intente salirse de la pantalla */
+    overflow-x: hidden;
 }
 
 body {
-    background: linear-gradient(135deg, var(--purple-dark), var(--purple-light));
+    /* Fondo oscuro con el patrón de cuadrícula de la web original */
+    background-color: var(--bg-dark);
+    background-image: 
+        linear-gradient(var(--grid-color) 1px, transparent 1px),
+        linear-gradient(90deg, var(--grid-color) 1px, transparent 1px);
+    background-size: 60px 60px;
+    
     color: var(--text-light);
     min-height: 100vh;
     display: flex;
@@ -40,9 +48,7 @@ body {
 .hero h1 {
     font-size: 2.5rem;
     margin-bottom: 1rem;
-    background: linear-gradient(to right, #fff, #d4b3ff);
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
+    color: var(--text-light);
 }
 
 .hero p {
@@ -65,18 +71,22 @@ body {
 .module-card {
     display: block;
     text-decoration: none;
-    background: rgba(255, 255, 255, 0.1);
+    background: rgba(255, 255, 255, 0.03); /* Más transparente para que se vea la cuadrícula */
     backdrop-filter: blur(10px);
-    border: 1px solid rgba(255, 255, 255, 0.2);
+    border: 1px solid rgba(255, 255, 255, 0.08);
     border-radius: 20px;
     padding: 2rem;
     color: var(--text-light);
-    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
-    transition: transform 0.2s ease, box-shadow 0.2s ease;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+    transition: transform 0.2s ease, box-shadow 0.2s ease, background 0.2s ease;
 }
 
 .module-card:active {
-    transform: scale(0.96); /* Efecto de pulsación fluido en móvil */
+    transform: scale(0.96);
+}
+
+.module-card:hover {
+    background: rgba(255, 255, 255, 0.06);
 }
 
 .card-content h2 {
@@ -90,39 +100,35 @@ body {
 }
 
 /* --- CLASES PARA LA ANIMACIÓN DE SCROLL --- */
-
-/* Estado inicial: desplazado hacia abajo y transparente */
 .hidden {
     opacity: 0;
     transform: translateY(40px);
     transition: all 0.8s cubic-bezier(0.25, 0.46, 0.45, 0.94);
 }
 
-/* Estado final: posición original y opaco */
 .show {
     opacity: 1;
     transform: translateY(0);
 }
 
-/* Retraso para que la segunda tarjeta aparezca después de la primera */
 #card-arduino {
     transition-delay: 0.15s;
 }
 
-
-
-/* --- VISTA DE CÁMARA (salto.html) --- */
 /* --- VISTA DE CÁMARA REDISEÑADA (salto.html) --- */
 
 .salto-page {
-    /* El gradiente morado cubre toda la pantalla siempre */
-    background: linear-gradient(135deg, var(--purple-dark), var(--purple-light));
+    background-color: var(--bg-dark);
+    background-image: 
+        linear-gradient(var(--grid-color) 1px, transparent 1px),
+        linear-gradient(90deg, var(--grid-color) 1px, transparent 1px);
+    background-size: 60px 60px;
     min-height: 100vh;
     display: flex;
     flex-direction: column;
     padding: 0;
     margin: 0;
-    overflow: hidden; /* Evita scrolls raros al abrir paneles */
+    overflow: hidden;
 }
 
 /* Cabecera inquebrantable */
@@ -130,7 +136,7 @@ body {
     display: flex;
     align-items: center;
     justify-content: flex-start;
-    padding: 1.5rem 1rem; /* Se reduce ligeramente el padding lateral */
+    padding: 1.5rem 1rem;
     gap: 0.8rem;
     width: 100%;
 }
@@ -143,7 +149,7 @@ body {
     text-decoration: none;
     font-weight: bold;
     font-size: 1.1rem;
-    flex-shrink: 0; /* Evita que el botón se aplaste */
+    flex-shrink: 0;
 }
 
 .header-title {
@@ -153,25 +159,56 @@ body {
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
-    min-width: 0; /* Crucial: permite que el texto se trunque en pantallas pequeñas */
+    min-width: 0;
 }
 
 /* El rectángulo de la cámara */
 .camera-wrapper {
+    position: relative;
     padding: 0 1.5rem;
     width: 100%;
     display: flex;
     justify-content: center;
+    align-items: center;
 }
 
 #vista-camara {
     width: 100%;
     max-width: 500px;
-    height: 45vh; /* Altura responsiva */
+    height: 45vh;
     background-color: #000;
     border-radius: 24px;
     object-fit: cover;
-    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.4);
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+#canvas-esqueleto {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+    z-index: 5;
+}
+
+#indicador-ia {
+    position: absolute;
+    top: 15px;
+    left: 30px;
+    z-index: 10;
+    background: rgba(255, 165, 0, 0.8);
+    color: #fff;
+    padding: 6px 12px;
+    border-radius: 20px;
+    font-size: 14px;
+    font-weight: bold;
+    transition: all 0.3s ease;
+}
+
+.ia-lista {
+    background: var(--purple-brand) !important;
 }
 
 /* Panel de controles */
@@ -189,23 +226,33 @@ body {
 
 .config-panel {
     display: flex;
-    gap: 0.5rem; /* Separación reducida para encajar en pantallas estrechas */
+    gap: 0.5rem;
     width: 100%;
 }
 
+/* Inputs modo oscuro - Ajustado para fondo más claro */
 .modern-input {
     flex: 1;
-    min-width: 0; /* Permite que los inputs se hagan más pequeños que su tamaño por defecto */
-    padding: 0.8rem; /* Padding interno reducido */
+    min-width: 0;
+    padding: 0.8rem;
     border-radius: 14px;
-    border: none;
-    background: rgba(255, 255, 255, 0.9);
-    color: var(--purple-dark);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    background: rgba(255, 255, 255, 0.05); /* Fondo input más claro que el body */
+    color: var(--text-light);
     font-weight: 600;
-    font-size: 0.95rem; /* Fuente ligeramente más pequeña */
+    font-size: 0.95rem;
     outline: none;
     height: 54px;
-    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+}
+
+.modern-input::placeholder {
+    color: rgba(255, 255, 255, 0.4);
+}
+
+/* Para que las opciones del select se vean bien */
+.modern-input option {
+    background: var(--bg-dark);
+    color: var(--text-light);
 }
 
 .controls {
@@ -216,7 +263,7 @@ body {
     gap: 1rem;
 }
 
-/* Botón principal (Grabar) */
+/* Botón principal corporativo */
 .record-btn {
     display: flex;
     align-items: center;
@@ -225,23 +272,23 @@ body {
     height: 60px;
     border-radius: 30px;
     border: none;
-    background: #ff3b30;
+    background: var(--purple-brand);
     color: white;
     font-size: 1.2rem;
     font-weight: bold;
-    box-shadow: 0 4px 15px rgba(255, 59, 48, 0.4);
+    box-shadow: 0 4px 20px rgba(133, 76, 181, 0.4);
     transition: all 0.3s ease;
 }
 
 .record-btn.recording {
-    background: #ff9500;
+    background: #9b5cd4; /* Un tono más claro al activar */
     animation: pulse 1.5s infinite;
 }
 
 @keyframes pulse {
-    0% { transform: scale(1); box-shadow: 0 0 0 0 rgba(255, 149, 0, 0.7); }
-    70% { transform: scale(1.02); box-shadow: 0 0 0 15px rgba(255, 149, 0, 0); }
-    100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(255, 149, 0, 0); }
+    0% { transform: scale(1); box-shadow: 0 0 0 0 rgba(133, 76, 181, 0.7); }
+    70% { transform: scale(1.02); box-shadow: 0 0 0 15px rgba(133, 76, 181, 0); }
+    100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(133, 76, 181, 0); }
 }
 
 /* Botón de subida estético */
@@ -255,7 +302,7 @@ body {
 }
 
 .divider {
-    color: rgba(255, 255, 255, 0.5);
+    color: rgba(255, 255, 255, 0.3);
     font-size: 0.8rem;
     letter-spacing: 2px;
 }
@@ -263,9 +310,8 @@ body {
 .upload-btn-visual {
     width: 100%;
     text-align: center;
-    background: rgba(255, 255, 255, 0.1);
-    backdrop-filter: blur(10px);
-    border: 1px solid rgba(255, 255, 255, 0.3);
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.15);
     border-radius: 30px;
     padding: 1rem;
     color: var(--text-light);
@@ -286,27 +332,28 @@ body {
     z-index: 10;
 }
 
-/* --- PANEL DE RESULTADOS (BOTTOM SHEET) --- */
+/* --- PANEL DE RESULTADOS MODO OSCURO - Fondo ajustado --- */
 .results-sheet {
     position: fixed;
     bottom: 0;
     left: 0;
     width: 100%;
-    height: 80vh; /* Ocupa buena parte de la pantalla */
-    background: var(--text-light);
+    height: 80vh;
+    background: var(--results-sheet-bg); /* Fondo violeta oscuro ajustado */
+    border-top: 1px solid rgba(255, 255, 255, 0.1);
     border-radius: 40px 40px 0 0;
     padding: 2.5rem 2rem;
     z-index: 100;
     display: flex;
     flex-direction: column;
     align-items: center;
-    transform: translateY(100%); /* Escondido abajo por defecto */
+    transform: translateY(100%);
     transition: transform 0.5s cubic-bezier(0.2, 0.8, 0.2, 1);
-    box-shadow: 0 -10px 40px rgba(0,0,0,0.3);
+    box-shadow: 0 -15px 40px rgba(0,0,0,0.8);
 }
 
 .results-sheet.show {
-    transform: translateY(0); /* Sube suavemente */
+    transform: translateY(0);
 }
 
 .results-content {
@@ -322,29 +369,29 @@ body {
 #distancia-resultado {
     font-size: 4.5rem;
     margin: 0;
-    background: linear-gradient(135deg, var(--purple-dark), var(--purple-light));
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
+    color: var(--text-light);
     font-weight: 900;
 }
 
 .results-subtitle {
-    color: #666;
+    color: var(--purple-brand);
     font-size: 1.1rem;
     margin-bottom: 2rem;
+    font-weight: bold;
 }
 
-/* Cuadrícula de datos técnicos */
+/* Cuadrícula de datos técnicos modo oscuro */
 .technical-data-grid {
     display: grid;
     grid-template-columns: 1fr 1fr;
     gap: 1rem;
     width: 100%;
-    margin-bottom: auto; /* Empuja el botón al fondo */
+    margin-bottom: auto;
 }
 
 .data-box {
-    background: #f0f0f5;
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid rgba(255, 255, 255, 0.08);
     padding: 1rem;
     border-radius: 16px;
     display: flex;
@@ -353,40 +400,42 @@ body {
 }
 
 .data-label {
-    color: #888;
+    color: var(--text-muted);
     font-size: 0.85rem;
     text-transform: uppercase;
     letter-spacing: 1px;
 }
 
 .data-value {
-    color: var(--purple-dark);
+    color: var(--text-light);
     font-size: 1.2rem;
     font-weight: bold;
 }
 
-/* El botón grande de Nuevo Salto */
 .primary-btn-large {
     width: 100%;
     padding: 1.2rem;
     border-radius: 30px;
     border: none;
-    background: linear-gradient(135deg, var(--purple-dark), var(--purple-light));
+    background: var(--purple-brand);
     color: white;
     font-size: 1.2rem;
     font-weight: bold;
     margin-top: 2rem;
-    box-shadow: 0 8px 20px rgba(100, 65, 165, 0.3);
+    box-shadow: 0 8px 20px rgba(133, 76, 181, 0.3);
     cursor: pointer;
 }
-
 
 /* ═══════════════════════════════════════════════
    VISTA DEL SENSOR (arduino.html)
    ═══════════════════════════════════════════════ */
 
 .sensor-page {
-    background: linear-gradient(135deg, var(--purple-dark), var(--purple-light));
+    background-color: var(--bg-dark);
+    background-image: 
+        linear-gradient(var(--grid-color) 1px, transparent 1px),
+        linear-gradient(90deg, var(--grid-color) 1px, transparent 1px);
+    background-size: 60px 60px;
     min-height: 100vh;
     display: flex;
     flex-direction: column;
@@ -405,16 +454,15 @@ body {
 .sensor-display {
     width: 100%;
     max-width: 400px;
-    background: rgba(255, 255, 255, 0.08);
+    background: rgba(255, 255, 255, 0.03);
     backdrop-filter: blur(14px);
-    border: 1px solid rgba(255, 255, 255, 0.15);
+    border: 1px solid rgba(255, 255, 255, 0.1);
     border-radius: 32px;
     padding: 2.5rem 2rem;
     text-align: center;
-    box-shadow: 0 12px 40px rgba(0, 0, 0, 0.3);
+    box-shadow: 0 12px 40px rgba(0, 0, 0, 0.5);
 }
 
-/* Badge de estado (conectado / desconectado) */
 .estado-badge {
     display: inline-flex;
     align-items: center;
@@ -426,14 +474,15 @@ body {
     margin-bottom: 1.5rem;
 }
 
+/* Colores de estado adaptados al modo oscuro */
 .estado-badge.conectado {
-    background: rgba(52, 199, 89, 0.2);
-    color: #34c759;
+    background: rgba(133, 76, 181, 0.2);
+    color: #b580e2;
 }
 
 .estado-badge.desconectado {
-    background: rgba(255, 59, 48, 0.2);
-    color: #ff6b6b;
+    background: rgba(255, 255, 255, 0.1);
+    color: var(--text-muted);
 }
 
 .estado-dot {
@@ -442,8 +491,8 @@ body {
     border-radius: 50%;
 }
 
-.conectado .estado-dot { background: #34c759; }
-.desconectado .estado-dot { background: #ff6b6b; }
+.conectado .estado-dot { background: #b580e2; }
+.desconectado .estado-dot { background: var(--text-muted); }
 
 .display-label {
     color: var(--text-muted);
@@ -457,17 +506,15 @@ body {
     font-size: 4rem;
     font-weight: 900;
     margin: 0.5rem 0 1rem;
-    background: linear-gradient(to right, #fff, #d4b3ff);
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
+    color: var(--text-light);
 }
 
 .display-timestamp {
-    color: rgba(255, 255, 255, 0.5);
+    color: rgba(255, 255, 255, 0.4);
     font-size: 0.85rem;
 }
 
-/* Controles del sensor */
+/* Controles del sensor corporativos */
 .sensor-hud {
     padding: 1.5rem;
     display: flex;
@@ -485,18 +532,20 @@ body {
     height: 60px;
     border-radius: 30px;
     border: none;
-    background: #34c759;
+    background: var(--purple-brand);
     color: white;
     font-size: 1.2rem;
     font-weight: bold;
-    box-shadow: 0 4px 15px rgba(52, 199, 89, 0.4);
+    box-shadow: 0 4px 15px rgba(133, 76, 181, 0.4);
     transition: all 0.3s ease;
     cursor: pointer;
 }
 
 .sensor-btn.activo {
-    background: #ff3b30;
-    box-shadow: 0 4px 15px rgba(255, 59, 48, 0.4);
+    background: transparent;
+    border: 2px solid var(--purple-brand);
+    color: var(--purple-brand);
+    box-shadow: none;
 }
 
 .sensor-nota {
@@ -504,37 +553,3 @@ body {
     font-size: 0.8rem;
     text-align: center;
 }
-
-
-.camera-wrapper {
-            position: relative;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            background-color: #000;
-        }
-        #canvas-esqueleto {
-            position: absolute;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            pointer-events: none; /* Permite hacer clic a través del canvas */
-            z-index: 5;
-        }
-        #indicador-ia {
-            position: absolute;
-            top: 15px;
-            left: 15px;
-            z-index: 10;
-            background: rgba(255, 165, 0, 0.8);
-            color: #fff;
-            padding: 6px 12px;
-            border-radius: 20px;
-            font-size: 14px;
-            font-weight: bold;
-            transition: all 0.3s ease;
-        }
-        .ia-lista {
-            background: rgba(40, 167, 69, 0.8) !important;
-        }

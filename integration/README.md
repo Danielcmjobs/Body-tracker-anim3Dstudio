@@ -1,51 +1,44 @@
-# Ejecución del Proyecto
+# Ejecución del Proyecto: Web y Backend de Salto
 
-Esta guía detalla los pasos necesarios para iniciar el entorno de desarrollo local.
+Esta guía detalla los pasos necesarios para iniciar el entorno de desarrollo local, activando tanto el motor de visión artificial (backend) como la interfaz de usuario (frontend).
 
-## Arranque rápido (recomendado)
+## 1. Iniciar el Backend (Motor de IA)
 
-Hacer doble clic en:
+El servidor Python es responsable de procesar los vídeos utilizando MediaPipe y devolver las mediciones. Es necesario arrancarlo en primer lugar.
 
-```
-scripts\run_all.bat
-```
-
-Esto arranca automáticamente los tres servicios:
-
-| Servicio | Puerto | Descripción |
-|----------|--------|-------------|
-| Backend Salto | 5001 | API de análisis de saltos (MediaPipe) |
-| Backend Sensor | 5000 | API del sensor Arduino (requiere Arduino conectado) |
-| Frontend Web | 8080 | Interfaz web unificada |
-
-Después, abrir `http://localhost:8080` en el navegador.
-
-## Arranque manual (si se prefiere)
-
-### 1. Backend del salto (puerto 5001)
+1. Abrir una terminal.
+2. Navegar al directorio del backend:
 
 ```bash
 cd modules/salto/backend
-python app.py
 ```
 
-### 2. Backend del sensor (puerto 5000, opcional)
-
-Requiere Arduino con HC-SR04 conectado por USB.
+3. Ejecutar el script principal:
 
 ```bash
-cd modules/sensor/backend
 python app.py
 ```
 
-### 3. Frontend web (puerto 8080)
+**Nota:** La terminal debe indicar que el servicio está activo y escuchando en el puerto 5001.
+
+## 2. Iniciar el Frontend (Interfaz Web)
+
+La página web necesita su propio servidor de archivos estáticos para cargar los recursos (HTML, CSS, JS) y permitir la conexión desde otros dispositivos en la red.
+
+1. Abrir una nueva terminal (es imprescindible mantener la del backend ejecutándose en segundo plano).
+2. Navegar al directorio donde se encuentra la web:
 
 ```bash
 cd integration/web
+```
+
+3. Levantar el servidor HTTP nativo de Python en el puerto 8080:
+
+```bash
 python -m http.server 8080
 ```
 
-## Acceder a la Aplicación
+## 3. Acceder a la Aplicación
 
 El método de acceso varía dependiendo de si se utiliza el mismo equipo de desarrollo o un dispositivo externo.
 
@@ -73,3 +66,13 @@ Por políticas de seguridad, los navegadores bloquean la cámara en conexiones n
 2. Cambiar el menú desplegable resaltado a **Enabled**.
 3. En el cuadro de texto inferior, introducir la dirección completa utilizada para acceder (ej. `http://192.168.1.130:8080`).
 4. Pulsar el botón de reinicio del navegador que aparecerá en la parte inferior de la pantalla.
+
+## Interfaz Gráfica
+
+A continuación se muestra el diseño de las pantallas principales de la aplicación:
+
+| Pantalla de Inicio | Cámara en Vivo  |
+| :---: | :---: |
+| ![Inicio](../img/capturas/inicio.jpeg) | ![Cámara Salto](../img/capturas/salto.jpeg) |
+| **Resultados del Análisis** | **Monitor del Sensor Ultrasónico** |
+| ![Resultados](../img/capturas/resultados.jpeg) | ![Monitor Sensor](../img/capturas/sensor.jpeg) |

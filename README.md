@@ -1,4 +1,4 @@
-# proyecto-medicion
+# Proyecto-Medición
 
 Plataforma web modular para captura, procesamiento y visualización de **mediciones físicas en tiempo real**.
 
@@ -81,7 +81,9 @@ proyecto-medicion/
 ├── scripts/
 │   └── run_all.bat              ← Arranca todo con un doble-clic
 │
-└── tests/                       # Reservado
+├── tests/                       # Reservado
+│
+└── img/                         # imágenes, capturas, etc.
 ```
 
 ---
