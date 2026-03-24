@@ -29,3 +29,13 @@ EXTENSIONES_PERMITIDAS: set = {".mp4", ".webm", ".avi", ".mov"}
 
 # Tamaño máximo de archivo subido (100 MB)
 MAX_UPLOAD_MB: int = 100
+
+# ── Configuración de base de datos MySQL ──
+DB_CONFIG = {
+    "host": "localhost",
+    "user": "root",
+    "password": "",
+    "database": "bd_anim3d_saltos",
+    "charset": "utf8mb4",
+    "collation": "utf8mb4_unicode_ci",
+}
