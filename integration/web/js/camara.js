@@ -8,6 +8,31 @@ document.addEventListener('DOMContentLoaded', () => {
     const labelVisual = document.getElementById('label-visual');
     
     let detectando = false;
+    let iaLista = false;
+    let usuarioSeleccionado = false;
+
+    function actualizarEstadoBotonDeteccion() {
+        if (!btnGrabar || !btnText) {
+            return;
+        }
+
+        const habilitado = iaLista && usuarioSeleccionado;
+        btnGrabar.disabled = !habilitado;
+
+        if (!iaLista) {
+            btnText.textContent = 'Cargando motor IA...';
+            return;
+        }
+
+        if (!usuarioSeleccionado) {
+            btnText.textContent = 'Selecciona un usuario';
+            return;
+        }
+
+        if (!detectando) {
+            btnText.textContent = 'Iniciar Detección';
+        }
+    }
 
     function mostrarGuiaPermisos(error) {
         const host = window.location.hostname;
@@ -68,6 +93,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // --- 2. CONTROL DEL BOTÓN DE DETECCIÓN EN VIVO ---
     btnGrabar.addEventListener('click', () => {
+        if (btnGrabar.disabled) {
+            return;
+        }
         detectando = !detectando;
 
         if (detectando) {
@@ -87,7 +115,22 @@ document.addEventListener('DOMContentLoaded', () => {
     document.addEventListener('restaurarBotonCamara', () => {
         detectando = false;
         btnGrabar.classList.remove('recording');
-        btnText.textContent = 'Iniciar Detección';
+        actualizarEstadoBotonDeteccion();
+    });
+
+    document.addEventListener('iaEstadoCambio', (event) => {
+        iaLista = Boolean(event.detail && event.detail.lista);
+        actualizarEstadoBotonDeteccion();
+    });
+
+    document.addEventListener('usuarioSeleccionCambio', (event) => {
+        usuarioSeleccionado = Boolean(event.detail && event.detail.seleccionado);
+        if (!usuarioSeleccionado && detectando) {
+            detectando = false;
+            btnGrabar.classList.remove('recording');
+            document.dispatchEvent(new Event('detenerDeteccion'));
+        }
+        actualizarEstadoBotonDeteccion();
     });
 
     // --- 3. LÓGICA DE SUBIDA DE ARCHIVO (AL BACKEND PYTHON) ---
@@ -114,5 +157,6 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
+    actualizarEstadoBotonDeteccion();
     iniciarCamara();
 });

@@ -48,6 +48,20 @@ function getUsuarioActivo() {
     };
 }
 
+function hayUsuarioSeleccionadoParaDeteccion() {
+    const usuario = getUsuarioActivo();
+    if (!usuario) {
+        return false;
+    }
+
+    const tablaBody = document.getElementById('tabla-usuarios-body');
+    if (!tablaBody) {
+        return true;
+    }
+
+    return Boolean(tablaBody.querySelector('tr.activo'));
+}
+
 function getPreferenciaGuardarVideoTiempoReal() {
     const opcion = document.querySelector('input[name="guardar-video-tiempo-real"]:checked');
     return opcion ? opcion.value : 'no';
@@ -158,8 +172,9 @@ async function crearPoseLandmarker() {
 
         indicador.textContent = 'Motor Listo';
         indicador.classList.add('ia-lista');
-        btnGrabar.disabled = false;
-        btnGrabar.querySelector('#btn-text').textContent = 'Iniciar Detección';
+        document.dispatchEvent(new CustomEvent('iaEstadoCambio', {
+            detail: { lista: true }
+        }));
 
         setTimeout(() => {
             indicador.style.display = 'none';
@@ -167,6 +182,9 @@ async function crearPoseLandmarker() {
     } catch (error) {
         indicador.textContent = 'Error IA. Usa archivos.';
         indicador.style.background = 'red';
+        document.dispatchEvent(new CustomEvent('iaEstadoCambio', {
+            detail: { lista: false }
+        }));
     }
 }
 
@@ -449,12 +467,13 @@ function procesarResultadoSegunModo(datos) {
 }
 
 document.addEventListener('iniciarDeteccion', () => {
-    const usuario = getUsuarioActivo();
-    if (!usuario) {
+    if (!hayUsuarioSeleccionadoParaDeteccion()) {
         mostrarToast('Debes seleccionar o crear un usuario para registrar el salto.', 'warn', 3000);
         document.dispatchEvent(new Event('restaurarBotonCamara'));
         return;
     }
+
+    const usuario = getUsuarioActivo();
 
     const alturaInput = document.getElementById('altura-usuario');
     if (alturaInput && !alturaInput.value) {

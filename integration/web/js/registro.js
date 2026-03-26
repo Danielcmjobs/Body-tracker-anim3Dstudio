@@ -16,6 +16,32 @@ function setUsuarioActivo(usuario) {
         estado.textContent = `Usuario activo: ${usuario.alias} (ID ${usuario.id_usuario})`;
         estado.style.color = '#34c759';
     }
+
+    document.dispatchEvent(new CustomEvent('usuarioSeleccionCambio', {
+        detail: { seleccionado: true, usuario }
+    }));
+}
+
+function limpiarUsuarioActivo(mensaje = 'Sin usuario activo.') {
+    sessionStorage.removeItem('idUser');
+    sessionStorage.removeItem('aliasUser');
+    sessionStorage.removeItem('nombreUser');
+    sessionStorage.removeItem('alturaUser');
+
+    const alturaInput = document.getElementById('altura-usuario');
+    if (alturaInput) {
+        alturaInput.value = '';
+    }
+
+    const estado = document.getElementById('usuario-estado');
+    if (estado) {
+        estado.textContent = mensaje;
+        estado.style.color = 'var(--text-muted)';
+    }
+
+    document.dispatchEvent(new CustomEvent('usuarioSeleccionCambio', {
+        detail: { seleccionado: false }
+    }));
 }
 
 async function crearUsuario(alias, nombreCompleto, alturaM) {
@@ -36,6 +62,33 @@ async function crearUsuario(alias, nombreCompleto, alturaM) {
     }
 
     return payload.id_usuario;
+}
+
+async function actualizarUsuario(idUsuario, alias, nombreCompleto, alturaM) {
+    const url = `${getBackendBaseUrl()}/api/usuarios/${idUsuario}`;
+    const respuesta = await fetch(url, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            alias: alias,
+            nombre_completo: nombreCompleto,
+            altura_m: alturaM
+        })
+    });
+
+    const payload = await respuesta.json();
+    if (!respuesta.ok) {
+        throw new Error(payload.error || payload.mensaje || `Error HTTP: ${respuesta.status}`);
+    }
+}
+
+async function eliminarUsuario(idUsuario) {
+    const url = `${getBackendBaseUrl()}/api/usuarios/${idUsuario}`;
+    const respuesta = await fetch(url, { method: 'DELETE' });
+    const payload = await respuesta.json();
+    if (!respuesta.ok) {
+        throw new Error(payload.error || payload.mensaje || `Error HTTP: ${respuesta.status}`);
+    }
 }
 
 async function obtenerUsuarios() {
@@ -149,6 +202,12 @@ document.addEventListener('DOMContentLoaded', () => {
     const usuariosEmpty = document.getElementById('usuarios-empty');
     const btnRefrescar = document.getElementById('btn-refrescar-usuarios');
     const btnCrearInline = document.getElementById('btn-crear-usuario-inline');
+    const btnEditar = document.getElementById('btn-editar-usuario');
+    const btnEliminar = document.getElementById('btn-eliminar-usuario');
+    const btnCancelarEdicion = document.getElementById('btn-cancelar-edicion');
+    const inputAlias = document.getElementById('nuevo-alias');
+    const inputNombre = document.getElementById('nuevo-nombre');
+    const inputAltura = document.getElementById('nuevo-altura');
 
     const PAGE_SIZE = 20;
     let usuariosOffset = 0;
@@ -156,6 +215,42 @@ document.addEventListener('DOMContentLoaded', () => {
     let usuariosLoadingPage = false;
     let terminoBusqueda = '';
     let usuarioActivoId = Number(sessionStorage.getItem('idUser') || '0');
+    let usuarioActivoData = null;
+    let modoEdicion = false;
+
+    function setEstado(mensaje, color = 'var(--text-muted)') {
+        const estado = document.getElementById('usuario-estado');
+        if (estado) {
+            estado.textContent = mensaje;
+            estado.style.color = color;
+        }
+    }
+
+    function limpiarFormularioUsuario() {
+        if (inputAlias) inputAlias.value = '';
+        if (inputNombre) inputNombre.value = '';
+        if (inputAltura) inputAltura.value = '';
+    }
+
+    function activarModoEdicion(usuario) {
+        if (!usuario || !inputAlias || !inputNombre || !inputAltura || !btnCrearInline || !btnCancelarEdicion) {
+            return;
+        }
+        modoEdicion = true;
+        inputAlias.value = usuario.alias || '';
+        inputNombre.value = usuario.nombre_completo || '';
+        inputAltura.value = String(usuario.altura_m ?? '');
+        btnCrearInline.textContent = 'Guardar cambios';
+        btnCancelarEdicion.style.display = 'block';
+        setEstado(`Editando usuario: ${usuario.alias}`, '#c897ff');
+    }
+
+    function desactivarModoEdicion() {
+        modoEdicion = false;
+        if (btnCrearInline) btnCrearInline.textContent = 'Crear usuario';
+        if (btnCancelarEdicion) btnCancelarEdicion.style.display = 'none';
+        limpiarFormularioUsuario();
+    }
 
     function obtenerEdadTexto(u) {
         if (u.edad !== undefined && u.edad !== null && String(u.edad).trim() !== '') {
@@ -175,6 +270,13 @@ document.addEventListener('DOMContentLoaded', () => {
         tr.dataset.idUsuario = String(u.id_usuario);
         if (Number(u.id_usuario) === usuarioActivoId) {
             tr.classList.add('activo');
+            usuarioActivoData = u;
+            setUsuarioActivo({
+                id_usuario: u.id_usuario,
+                alias: u.alias,
+                nombre_completo: u.nombre_completo,
+                altura_m: Number(u.altura_m)
+            });
         }
 
         tr.innerHTML = `
@@ -185,6 +287,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         tr.addEventListener('click', () => {
             usuarioActivoId = Number(u.id_usuario);
+            usuarioActivoData = u;
             document.querySelectorAll('#tabla-usuarios-body tr').forEach((row) => row.classList.remove('activo'));
             tr.classList.add('activo');
             setUsuarioActivo({
@@ -231,11 +334,7 @@ document.addEventListener('DOMContentLoaded', () => {
             usuariosOffset += data.items.length;
             usuariosHasMore = Boolean(data.has_more);
         } catch (error) {
-            const estado = document.getElementById('usuario-estado');
-            if (estado) {
-                estado.textContent = `No se pudo cargar usuarios: ${error.message}`;
-                estado.style.color = '#ff6b6b';
-            }
+            setEstado(`No se pudo cargar usuarios: ${error.message}`, '#ff6b6b');
         } finally {
             usuariosLoadingPage = false;
             actualizarEstadosTabla();
@@ -251,11 +350,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     if (tablaBody) {
         recargarUsuariosSelect().catch((error) => {
-            const estado = document.getElementById('usuario-estado');
-            if (estado) {
-                estado.textContent = `No se pudo cargar usuarios: ${error.message}`;
-                estado.style.color = '#ff6b6b';
-            }
+            setEstado(`No se pudo cargar usuarios: ${error.message}`, '#ff6b6b');
         });
     }
 
@@ -281,63 +376,112 @@ document.addEventListener('DOMContentLoaded', () => {
 
     if (btnRefrescar) {
         btnRefrescar.addEventListener('click', async () => {
-            const estado = document.getElementById('usuario-estado');
             try {
                 await recargarUsuariosSelect();
-                if (estado) {
-                    estado.textContent = 'Lista de usuarios actualizada.';
-                    estado.style.color = 'var(--text-muted)';
-                }
+                setEstado('Lista de usuarios actualizada.');
             } catch (error) {
-                if (estado) {
-                    estado.textContent = `Error al actualizar: ${error.message}`;
-                    estado.style.color = '#ff6b6b';
-                }
+                setEstado(`Error al actualizar: ${error.message}`, '#ff6b6b');
             }
+        });
+    }
+
+    if (btnEditar) {
+        btnEditar.addEventListener('click', () => {
+            if (!usuarioActivoData) {
+                setEstado('Selecciona un usuario para editar.', '#ffb020');
+                return;
+            }
+            activarModoEdicion(usuarioActivoData);
+        });
+    }
+
+    if (btnEliminar) {
+        btnEliminar.addEventListener('click', async () => {
+            if (!usuarioActivoData) {
+                setEstado('Selecciona un usuario para eliminar.', '#ffb020');
+                return;
+            }
+
+            const confirmado = window.confirm(`¿Eliminar al usuario ${usuarioActivoData.alias}? Esta accion no se puede deshacer.`);
+            if (!confirmado) {
+                return;
+            }
+
+            btnEliminar.disabled = true;
+            const texto = btnEliminar.textContent;
+            btnEliminar.textContent = 'Eliminando...';
+            try {
+                await eliminarUsuario(usuarioActivoData.id_usuario);
+                if (Number(sessionStorage.getItem('idUser') || '0') === Number(usuarioActivoData.id_usuario)) {
+                    limpiarUsuarioActivo('Usuario eliminado. Selecciona otro para continuar.');
+                }
+                usuarioActivoId = 0;
+                usuarioActivoData = null;
+                desactivarModoEdicion();
+                await recargarUsuariosSelect();
+                setEstado('Usuario eliminado correctamente.', '#34c759');
+            } catch (error) {
+                setEstado(`No se pudo eliminar: ${error.message}`, '#ff6b6b');
+            } finally {
+                btnEliminar.disabled = false;
+                btnEliminar.textContent = texto;
+            }
+        });
+    }
+
+    if (btnCancelarEdicion) {
+        btnCancelarEdicion.addEventListener('click', () => {
+            desactivarModoEdicion();
+            setEstado('Edicion cancelada.');
         });
     }
 
     if (btnCrearInline) {
         btnCrearInline.addEventListener('click', async () => {
-            const alias = (document.getElementById('nuevo-alias')?.value || '').trim();
-            const nombre = (document.getElementById('nuevo-nombre')?.value || '').trim();
-            const altura = parseFloat(document.getElementById('nuevo-altura')?.value || '0');
-            const estado = document.getElementById('usuario-estado');
+            const alias = (inputAlias?.value || '').trim();
+            const nombre = (inputNombre?.value || '').trim();
+            const altura = parseFloat(inputAltura?.value || '0');
 
             if (!alias || !nombre || !(altura > 0)) {
-                if (estado) {
-                    estado.textContent = 'Completa alias, nombre y altura para crear usuario.';
-                    estado.style.color = '#ffb020';
-                }
+                setEstado('Completa alias, nombre y altura.', '#ffb020');
                 return;
             }
 
             btnCrearInline.disabled = true;
             const texto = btnCrearInline.textContent;
-            btnCrearInline.textContent = 'Creando...';
+            const eraEdicion = modoEdicion;
+            btnCrearInline.textContent = modoEdicion ? 'Guardando...' : 'Creando...';
             try {
-                const idUsuario = await crearUsuario(alias, nombre, altura);
-                usuarioActivoId = idUsuario;
+                if (modoEdicion && usuarioActivoData) {
+                    await actualizarUsuario(usuarioActivoData.id_usuario, alias, nombre, altura);
+                    usuarioActivoId = usuarioActivoData.id_usuario;
+                } else {
+                    const idUsuario = await crearUsuario(alias, nombre, altura);
+                    usuarioActivoId = idUsuario;
+                }
+
                 await recargarUsuariosSelect();
 
+                const idFinal = usuarioActivoId;
+                const usuarioFinal = {
+                    id_usuario: idFinal,
+                    alias,
+                    nombre_completo: nombre,
+                    altura_m: altura
+                };
+                usuarioActivoData = usuarioFinal;
+
                 setUsuarioActivo({
-                    id_usuario: idUsuario,
-                    alias: alias,
+                    id_usuario: idFinal,
+                    alias,
                     nombre_completo: nombre,
                     altura_m: altura
                 });
 
-                const aliasInput = document.getElementById('nuevo-alias');
-                const nombreInput = document.getElementById('nuevo-nombre');
-                const alturaInput = document.getElementById('nuevo-altura');
-                if (aliasInput) aliasInput.value = '';
-                if (nombreInput) nombreInput.value = '';
-                if (alturaInput) alturaInput.value = '';
+                desactivarModoEdicion();
+                setEstado(eraEdicion ? 'Usuario actualizado correctamente.' : 'Usuario creado correctamente.', '#34c759');
             } catch (error) {
-                if (estado) {
-                    estado.textContent = `No se pudo crear el usuario: ${error.message}`;
-                    estado.style.color = '#ff6b6b';
-                }
+                setEstado(`No se pudo guardar el usuario: ${error.message}`, '#ff6b6b');
             } finally {
                 btnCrearInline.disabled = false;
                 btnCrearInline.textContent = texto;
