@@ -23,6 +23,10 @@ let framesCalibracion = 0;
 let escalaMetrosPorUnidad = 0;
 let yPicoVuelo = 1.0;
 let despegueX = 0;
+let angulosDespegueActual = {
+    angulo_rodilla_deg: null,
+    angulo_cadera_deg: null
+};
 
 let mediaRecorder = null;
 let chunksGrabacion = [];
@@ -125,6 +129,68 @@ function normalizarTextoTipo(tipo) {
         return 'Vertical';
     }
     return tipo;
+}
+
+function normalizarNumeroOpcional(valor) {
+    if (valor === null || valor === undefined || valor === '') {
+        return null;
+    }
+    const n = Number(valor);
+    return Number.isFinite(n) ? n : null;
+}
+
+function anguloEntreVectoresDeg(v1, v2) {
+    const dot = (v1.x * v2.x) + (v1.y * v2.y);
+    const cross = (v1.x * v2.y) - (v1.y * v2.x);
+    const mod1 = Math.hypot(v1.x, v1.y);
+    const mod2 = Math.hypot(v2.x, v2.y);
+    if (mod1 === 0 || mod2 === 0) {
+        return null;
+    }
+    return Math.abs(Math.atan2(Math.abs(cross), dot) * (180 / Math.PI));
+}
+
+function promedioPunto(landmarks, idxA, idxB) {
+    const a = landmarks?.[idxA];
+    const b = landmarks?.[idxB];
+    if (!a || !b) {
+        return null;
+    }
+    const ax = normalizarNumeroOpcional(a.x);
+    const ay = normalizarNumeroOpcional(a.y);
+    const bx = normalizarNumeroOpcional(b.x);
+    const by = normalizarNumeroOpcional(b.y);
+    if (ax === null || ay === null || bx === null || by === null) {
+        return null;
+    }
+    return {
+        x: (ax + bx) / 2,
+        y: (ay + by) / 2
+    };
+}
+
+function calcularAngulosDespegueDesdeLandmarks(landmarks) {
+    const hombro = promedioPunto(landmarks, 11, 12);
+    const cadera = promedioPunto(landmarks, 23, 24);
+    const rodilla = promedioPunto(landmarks, 25, 26);
+    const tobillo = promedioPunto(landmarks, 27, 28);
+
+    if (!hombro || !cadera || !rodilla || !tobillo) {
+        return {
+            angulo_rodilla_deg: null,
+            angulo_cadera_deg: null
+        };
+    }
+
+    const vCaderaRodilla = { x: rodilla.x - cadera.x, y: rodilla.y - cadera.y };
+    const vTobilloRodilla = { x: rodilla.x - tobillo.x, y: rodilla.y - tobillo.y };
+    const vHombroCadera = { x: cadera.x - hombro.x, y: cadera.y - hombro.y };
+    const vRodillaCadera = { x: cadera.x - rodilla.x, y: cadera.y - rodilla.y };
+
+    return {
+        angulo_rodilla_deg: anguloEntreVectoresDeg(vCaderaRodilla, vTobilloRodilla),
+        angulo_cadera_deg: anguloEntreVectoresDeg(vHombroCadera, vRodillaCadera)
+    };
 }
 
 function escapeHtml(text) {
@@ -282,6 +348,7 @@ function calcularFaseSalto(landmarks) {
         tiempoDespegue = performance.now();
         despegueX = xPieActual;
         yPicoVuelo = yPieActual;
+        angulosDespegueActual = calcularAngulosDespegueDesdeLandmarks(landmarks);
     } else if (estadoSalto === 'aire') {
         if (yPieActual < yPicoVuelo) {
             yPicoVuelo = yPieActual;
@@ -388,7 +455,11 @@ async function guardarResultadoEnBackend(datosLocales, guardarVideo, videoBlob) 
             throw new Error(payload.error || `Error HTTP: ${respuesta.status}`);
         }
 
-        return payload;
+        return {
+            ...payload,
+            angulo_rodilla_deg: normalizarNumeroOpcional(payload.angulo_rodilla_deg) ?? datosLocales.angulo_rodilla_deg ?? null,
+            angulo_cadera_deg: normalizarNumeroOpcional(payload.angulo_cadera_deg) ?? datosLocales.angulo_cadera_deg ?? null,
+        };
     }
 
     const respuesta = await fetch(`${getBackendBaseUrl()}/api/saltos`, {
@@ -449,7 +520,9 @@ async function finalizarSaltoEnVivo(tiempoVuelo, startX, endX, ySuelo, yPico) {
         confianza: 0.95,
         tiempo_vuelo_s: Number(tiempoVuelo.toFixed(3)),
         frame_despegue: 'Directo',
-        frame_aterrizaje: 'Directo'
+        frame_aterrizaje: 'Directo',
+        angulo_rodilla_deg: normalizarNumeroOpcional(angulosDespegueActual.angulo_rodilla_deg),
+        angulo_cadera_deg: normalizarNumeroOpcional(angulosDespegueActual.angulo_cadera_deg)
     };
 
     const guardarVideo = getPreferenciaGuardarVideoTiempoReal() === 'si';
@@ -510,6 +583,10 @@ document.addEventListener('iniciarDeteccion', () => {
     framesCalibracion = 0;
     alturaBaseY = 0;
     yPicoVuelo = 1.0;
+    angulosDespegueActual = {
+        angulo_rodilla_deg: null,
+        angulo_cadera_deg: null
+    };
     finalizandoSalto = false;
 
     actualizarBadgeComparativa();
@@ -585,10 +662,14 @@ function animarResultados(datos) {
     document.getElementById('tipo-resultado').textContent = `Salto ${normalizarTextoTipo(datos.tipo_salto)}`;
 
     const porcentaje = Math.round((datos.confianza || 0) * 100);
+    const anguloRodilla = Number(datos.angulo_rodilla_deg);
+    const anguloCadera = Number(datos.angulo_cadera_deg);
     document.getElementById('data-confianza').textContent = `${porcentaje}%`;
     document.getElementById('data-tiempo').textContent = datos.tiempo_vuelo_s ? `${datos.tiempo_vuelo_s}s` : '--';
     document.getElementById('data-despegue').textContent = datos.frame_despegue || '--';
     document.getElementById('data-aterrizaje').textContent = datos.frame_aterrizaje || '--';
+    document.getElementById('data-angulo-rodilla').textContent = Number.isFinite(anguloRodilla) ? `${anguloRodilla.toFixed(2)} deg` : '--';
+    document.getElementById('data-angulo-cadera').textContent = Number.isFinite(anguloCadera) ? `${anguloCadera.toFixed(2)} deg` : '--';
 
     panelResultados.classList.add('show');
 }

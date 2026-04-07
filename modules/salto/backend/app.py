@@ -126,6 +126,8 @@ def calcular_salto():
             "frame_despegue": resultado.frame_despegue,
             "frame_aterrizaje": resultado.frame_aterrizaje,
             "tiempo_vuelo_s": resultado.tiempo_vuelo_s,
+            "angulo_rodilla_deg": resultado.angulo_rodilla_deg,
+            "angulo_cadera_deg": resultado.angulo_cadera_deg,
             "metodo": resultado.metodo,
             "dist_por_pixeles": resultado.dist_por_pixeles,
             "dist_por_cinematica": resultado.dist_por_cinematica,

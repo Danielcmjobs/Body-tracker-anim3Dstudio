@@ -44,9 +44,38 @@ function limpiarUsuarioActivo(mensaje = 'Sin usuario activo.') {
     }));
 }
 
+async function fetchJson(url, options = {}) {
+    let respuesta;
+    try {
+        respuesta = await fetch(url, options);
+    } catch (_error) {
+        const origen = window.location.origin || 'origen desconocido';
+        throw new Error(
+            `No hay conexion con el backend (${getBackendBaseUrl()}). ` +
+            `Asegura que el backend este iniciado y que CORS permita ${origen}.`
+        );
+    }
+
+    const raw = await respuesta.text();
+    let payload = {};
+    if (raw) {
+        try {
+            payload = JSON.parse(raw);
+        } catch (_e) {
+            payload = {};
+        }
+    }
+
+    if (!respuesta.ok) {
+        throw new Error(payload.error || payload.mensaje || `Error HTTP: ${respuesta.status}`);
+    }
+
+    return payload;
+}
+
 async function crearUsuario(alias, nombreCompleto, alturaM) {
     const url = `${getBackendBaseUrl()}/api/usuarios`;
-    const respuesta = await fetch(url, {
+    const payload = await fetchJson(url, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -56,17 +85,12 @@ async function crearUsuario(alias, nombreCompleto, alturaM) {
         })
     });
 
-    const payload = await respuesta.json();
-    if (!respuesta.ok) {
-        throw new Error(payload.error || payload.mensaje || `Error HTTP: ${respuesta.status}`);
-    }
-
     return payload.id_usuario;
 }
 
 async function actualizarUsuario(idUsuario, alias, nombreCompleto, alturaM) {
     const url = `${getBackendBaseUrl()}/api/usuarios/${idUsuario}`;
-    const respuesta = await fetch(url, {
+    await fetchJson(url, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -75,32 +99,16 @@ async function actualizarUsuario(idUsuario, alias, nombreCompleto, alturaM) {
             altura_m: alturaM
         })
     });
-
-    const payload = await respuesta.json();
-    if (!respuesta.ok) {
-        throw new Error(payload.error || payload.mensaje || `Error HTTP: ${respuesta.status}`);
-    }
 }
 
 async function eliminarUsuario(idUsuario) {
     const url = `${getBackendBaseUrl()}/api/usuarios/${idUsuario}`;
-    const respuesta = await fetch(url, { method: 'DELETE' });
-    const payload = await respuesta.json();
-    if (!respuesta.ok) {
-        throw new Error(payload.error || payload.mensaje || `Error HTTP: ${respuesta.status}`);
-    }
+    await fetchJson(url, { method: 'DELETE' });
 }
 
 async function obtenerUsuarios() {
     const url = `${getBackendBaseUrl()}/api/usuarios`;
-    const respuesta = await fetch(url);
-    const payload = await respuesta.json();
-
-    if (!respuesta.ok) {
-        throw new Error(payload.error || `Error HTTP: ${respuesta.status}`);
-    }
-
-    return payload;
+    return await fetchJson(url);
 }
 
 async function obtenerUsuariosPaginados({ search = '', limit = 20, offset = 0 }) {
@@ -111,12 +119,7 @@ async function obtenerUsuariosPaginados({ search = '', limit = 20, offset = 0 })
         offset: String(offset)
     });
     const url = `${getBackendBaseUrl()}/api/usuarios?${query.toString()}`;
-    const respuesta = await fetch(url);
-    const payload = await respuesta.json();
-
-    if (!respuesta.ok) {
-        throw new Error(payload.error || `Error HTTP: ${respuesta.status}`);
-    }
+    const payload = await fetchJson(url);
 
     if (Array.isArray(payload)) {
         const items = payload

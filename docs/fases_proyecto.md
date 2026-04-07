@@ -70,12 +70,12 @@ Prerequisito: Fase 2 completada (landmarks + historial de saltos en BD).
 
 ### 5.2 Ángulos articulares en el despegue
 
-- [ ] Extraer landmarks de cadera (23/24), rodilla (25/26) y tobillo (27/28) en el frame de despegue
-- [ ] Calcular ángulo de rodilla: `θ = arctan2` entre vectores cadera→rodilla y tobillo→rodilla
-- [ ] Calcular ángulo de cadera: entre vectores hombro→cadera y rodilla→cadera
-- [ ] Crear `biomecanica_service.py` con funciones de trigonometría puras
-- [ ] Devolver `angulo_rodilla_deg` y `angulo_cadera_deg` en la respuesta JSON
-- [ ] Mostrar ángulos en panel de resultados (dato técnico adicional)
+- [x] Extraer landmarks de cadera (23/24), rodilla (25/26) y tobillo (27/28) en el frame de despegue
+- [x] Calcular ángulo de rodilla: `θ = arctan2` entre vectores cadera→rodilla y tobillo→rodilla
+- [x] Calcular ángulo de cadera: entre vectores hombro→cadera y rodilla→cadera
+- [x] Crear `biomecanica_service.py` con funciones de trigonometría puras
+- [x] Devolver `angulo_rodilla_deg` y `angulo_cadera_deg` en la respuesta JSON
+- [x] Mostrar ángulos en panel de resultados (dato técnico adicional)
 
 ### 5.3 Asimetría bilateral
 
