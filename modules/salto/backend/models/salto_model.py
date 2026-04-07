@@ -112,6 +112,24 @@ class SaltoModel:
             )
             return cur.fetchall()
 
+    def actualizar(
+        self,
+        id_salto: int,
+        tipo_salto: str,
+        distancia_cm: int,
+        tiempo_vuelo_s: float | None,
+        confianza_ia: float | None,
+        metodo_origen: str,
+    ) -> bool:
+        with get_connection() as (conn, cur):
+            cur.execute(
+                "UPDATE saltos SET tipo_salto = %s, distancia_cm = %s, "
+                "tiempo_vuelo_s = %s, confianza_ia = %s, metodo_origen = %s "
+                "WHERE id_salto = %s",
+                (tipo_salto, distancia_cm, tiempo_vuelo_s, confianza_ia, metodo_origen, id_salto),
+            )
+            return cur.rowcount > 0
+
     def eliminar(self, id_salto: int) -> bool:
         with get_connection() as (conn, cur):
             cur.execute(

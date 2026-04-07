@@ -237,3 +237,56 @@ La comparativa compara los saltos de un mismo usuario consigo mismo:
 verticales con verticales, horizontales con horizontales. No hay  
 leaderboard ni ranking entre usuarios. Cada tipo de salto tiene sus  
 propias estadísticas independientes.
+
+---
+
+## Decisiones de seguridad y hardening
+
+## Eliminación de XSS por `innerHTML`
+
+Los campos `alias` y `nombre_completo` provienen de entrada de usuario y se
+mostraban en el frontend con `innerHTML`. Un alias como
+`<img onerror=alert(1)>` se ejecutaría en el navegador.
+
+Se sustituyó `innerHTML` por construcción DOM segura (`createElement` +
+`textContent`) en `api_salto.js` (comparativa) y `registro.js` (tabla de
+usuarios). `textContent` escapa automáticamente cualquier HTML.
+
+## Cabeceras de seguridad HTTP
+
+Todas las respuestas Flask incluyen cabeceras defensivas mediante un
+`@app.after_request`:
+
+- `X-Content-Type-Options: nosniff` — impide MIME sniffing.
+- `X-Frame-Options: DENY` — protege contra clickjacking.
+- `X-XSS-Protection: 1; mode=block` — protección XSS del navegador.
+- `Referrer-Policy: strict-origin-when-cross-origin` — limita filtración de URLs.
+
+## Sanitización de errores de base de datos
+
+Los `IntegrityError` de MySQL podían exponer nombres de tablas, columnas y
+constraints al cliente. Ahora se devuelve un mensaje genérico
+(`"Error de integridad: el usuario indicado no existe o hay un conflicto de datos"`)
+sin detalles internos. El error completo se registra en logs del servidor.
+
+## Validación de longitud en backend
+
+Aunque el HTML limita `alias` a 50 chars y `nombre` a 100, un atacante
+puede hacer peticiones directas al API. El backend ahora trunca
+`alias[:50]` y `nombre[:120]` (coincidiendo con los `VARCHAR` de la BD)
+antes de insertar, evitando errores de truncación de MySQL.
+
+## Validación de rango de altura (0.50–2.50 m)
+
+Antes se aceptaba cualquier float positivo como `altura_m`. Un valor
+absurdo (ej. 0.01 o 999) distorsiona la calibración píxel→metro y todos
+los cálculos de salto. Ahora se valida en backend (POST y PUT) y en
+frontend (formulario de registro e inline), con el rango biológico
+0.50–2.50 m.
+
+## Validación de tamaño de archivo en frontend
+
+El backend limita a 100 MB con `MAX_CONTENT_LENGTH`, pero sin validación
+cliente el usuario esperaría todo el upload para recibir un 413. Ahora
+`camara.js` comprueba `file.size` antes de enviar y muestra un aviso
+inmediato si se excede.

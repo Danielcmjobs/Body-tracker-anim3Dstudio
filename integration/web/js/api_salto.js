@@ -127,6 +127,12 @@ function normalizarTextoTipo(tipo) {
     return tipo;
 }
 
+function escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+}
+
 function mostrarComparativa(alias, tipoSalto, medidas) {
     const panelResultados = document.getElementById('panel-resultados');
     const resumen = document.getElementById('comparativa-resumen');
@@ -139,18 +145,35 @@ function mostrarComparativa(alias, tipoSalto, medidas) {
     }
 
     const media = medidas.reduce((acc, n) => acc + n, 0) / medidas.length;
-    const medidasHtml = medidas
-        .map((m, i) => `<li>${i + 1}. ${m.toFixed(2)} cm</li>`)
-        .join('');
 
     distanciaTitulo.textContent = `${media.toFixed(2)} cm`;
     subtitulo.textContent = 'Comparativa completada';
 
-    resumen.innerHTML = `
-        <p><span class="comparativa-alias">${alias}</span> ha obtenido las siguientes medidas en salto <span class="comparativa-tipo">${normalizarTextoTipo(tipoSalto)}</span>:</p>
-        <ul>${medidasHtml}</ul>
-        <p>La media de los saltos es <span class="comparativa-media">${media.toFixed(2)} cm</span>.</p>
-    `;
+    resumen.textContent = '';
+
+    const p1 = document.createElement('p');
+    const spanAlias = document.createElement('span');
+    spanAlias.className = 'comparativa-alias';
+    spanAlias.textContent = alias;
+    const spanTipo = document.createElement('span');
+    spanTipo.className = 'comparativa-tipo';
+    spanTipo.textContent = normalizarTextoTipo(tipoSalto);
+    p1.append(spanAlias, ' ha obtenido las siguientes medidas en salto ', spanTipo, ':');
+
+    const ul = document.createElement('ul');
+    medidas.forEach((m, i) => {
+        const li = document.createElement('li');
+        li.textContent = `${i + 1}. ${m.toFixed(2)} cm`;
+        ul.appendChild(li);
+    });
+
+    const p2 = document.createElement('p');
+    const spanMedia = document.createElement('span');
+    spanMedia.className = 'comparativa-media';
+    spanMedia.textContent = `${media.toFixed(2)} cm`;
+    p2.append('La media de los saltos es ', spanMedia, '.');
+
+    resumen.append(p1, ul, p2);
     resumen.style.display = 'block';
     gridTecnico.style.display = 'none';
     panelResultados.classList.add('show');
@@ -541,6 +564,8 @@ document.addEventListener('videoListo', async (evento) => {
         procesarResultadoSegunModo(datosGenerados);
     } catch (error) {
         mostrarToast(`Error al conectar con el backend. Comprueba que app.py esta arrancado.`, 'error', 3600);
+    } finally {
+        document.dispatchEvent(new Event('resultadoProcesado'));
     }
 });
 

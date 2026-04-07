@@ -5,6 +5,7 @@ Rutas:
     GET    /api/saltos        → Lista todos los saltos
     POST   /api/saltos        → Registra un salto manualmente
     GET    /api/saltos/<id>   → Obtiene un salto
+    PUT    /api/saltos/<id>   → Actualiza un salto
     DELETE /api/saltos/<id>   → Elimina un salto
 """
 
@@ -102,8 +103,8 @@ def crear():
             id_usuario, tipo_salto, distancia_cm,
             tiempo_vuelo_s, confianza_ia, metodo_origen,
         )
-    except IntegrityError as e:
-        return jsonify({"error": f"Error de integridad: {e}"}), 409
+    except IntegrityError:
+        return jsonify({"error": "Error de integridad: el usuario indicado no existe o hay un conflicto de datos"}), 409
 
     return jsonify({"id_salto": nuevo_id, "mensaje": "Salto registrado"}), 201
 
@@ -114,6 +115,58 @@ def obtener(id_salto):
     if not row:
         return jsonify({"error": "Salto no encontrado"}), 404
     return jsonify(_serializar(row))
+
+
+@saltos_bp.route("/api/saltos/<int:id_salto>", methods=["PUT"])
+def actualizar(id_salto):
+    data = request.get_json(silent=True)
+    if not data:
+        return jsonify({"error": "Se esperaba JSON en el body"}), 400
+
+    tipo_salto = (data.get("tipo_salto") or "").strip().lower()
+    distancia_cm = data.get("distancia_cm")
+    metodo_origen = (data.get("metodo_origen") or "").strip().lower()
+
+    if distancia_cm is None:
+        return jsonify({"error": "Campos obligatorios: tipo_salto, distancia_cm, metodo_origen"}), 400
+
+    if tipo_salto not in TIPOS_SALTO_VALIDOS:
+        return jsonify({"error": f"tipo_salto debe ser: {', '.join(TIPOS_SALTO_VALIDOS)}"}), 400
+
+    if metodo_origen not in METODOS_VALIDOS:
+        return jsonify({"error": f"metodo_origen debe ser: {', '.join(METODOS_VALIDOS)}"}), 400
+
+    try:
+        distancia_cm = int(distancia_cm)
+        if distancia_cm < 0:
+            raise ValueError
+    except (ValueError, TypeError):
+        return jsonify({"error": "distancia_cm debe ser un entero >= 0"}), 400
+
+    tiempo_vuelo_s = data.get("tiempo_vuelo_s")
+    confianza_ia = data.get("confianza_ia")
+
+    if tiempo_vuelo_s is not None:
+        try:
+            tiempo_vuelo_s = float(tiempo_vuelo_s)
+        except (ValueError, TypeError):
+            return jsonify({"error": "tiempo_vuelo_s debe ser numérico"}), 400
+
+    if confianza_ia is not None:
+        try:
+            confianza_ia = float(confianza_ia)
+            if not (0 <= confianza_ia <= 1):
+                raise ValueError
+        except (ValueError, TypeError):
+            return jsonify({"error": "confianza_ia debe ser un número entre 0 y 1"}), 400
+
+    ok = _salto_model.actualizar(
+        id_salto, tipo_salto, distancia_cm,
+        tiempo_vuelo_s, confianza_ia, metodo_origen,
+    )
+    if not ok:
+        return jsonify({"error": "Salto no encontrado"}), 404
+    return jsonify({"mensaje": "Salto actualizado"})
 
 
 @saltos_bp.route("/api/saltos/<int:id_salto>", methods=["DELETE"])

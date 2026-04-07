@@ -21,6 +21,7 @@ Guía paso a paso para usar la aplicación web de medición física.
 | Elemento | Detalle |
 |----------|---------|
 | **Python** | 3.10 o superior |
+| **MySQL** | 8.0 o superior (base de datos `bd_anim3d_saltos`) |
 | **Navegador** | Chrome, Edge o Firefox (actualizado) |
 | **Arduino** | Solo si se va a usar el módulo Sensor (HC-SR04 conectado por USB) |
 | **Cámara** | Solo si se va a grabar un salto desde el navegador |
@@ -31,6 +32,12 @@ Guía paso a paso para usar la aplicación web de medición física.
 cd ruta\del\proyecto
 .\.venv\Scripts\Activate.ps1      # Activar el entorno virtual
 pip install -r requirements.txt
+```
+
+### Inicializar la base de datos
+
+```powershell
+mysql -u root -p < scripts\init_db.sql
 ```
 
 ---
@@ -216,6 +223,7 @@ El backend del módulo salto (puerto 5001) expone, además del endpoint de cálc
 | `GET` | `/api/saltos` | Lista todos los saltos |
 | `POST` | `/api/saltos` | Registra un salto manualmente (JSON: `id_usuario`, `tipo_salto`, `distancia_cm`, `metodo_origen`) |
 | `GET` | `/api/saltos/<id>` | Obtiene un salto por ID |
+| `PUT` | `/api/saltos/<id>` | Actualiza un salto (JSON: `tipo_salto`, `distancia_cm`, `metodo_origen`; opcionales: `tiempo_vuelo_s`, `confianza_ia`) |
 | `DELETE` | `/api/saltos/<id>` | Elimina un salto |
 | `GET` | `/api/usuarios/<id>/saltos` | Lista los saltos de un usuario |
 

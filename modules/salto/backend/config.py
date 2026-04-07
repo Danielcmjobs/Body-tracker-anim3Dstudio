@@ -36,10 +36,19 @@ EXTENSIONES_PERMITIDAS: set = {".mp4", ".webm", ".avi", ".mov"}
 MAX_UPLOAD_MB: int = 100
 
 # ── Configuración de base de datos MySQL ──
+# Las credenciales se leen de variables de entorno (archivo .env en la raíz).
+# Si DB_PASSWORD no está definida, se lanza un error claro en vez de fallar en silencio.
+_db_password = os.getenv("DB_PASSWORD")
+if _db_password is None:
+    raise RuntimeError(
+        "Variable de entorno DB_PASSWORD no definida. "
+        "Copia .env.example a .env y rellena tus credenciales de MySQL."
+    )
+
 DB_CONFIG = {
     "host": os.getenv("DB_HOST", "localhost"),
     "user": os.getenv("DB_USER", "root"),
-    "password": os.getenv("DB_PASSWORD", "1234"),
+    "password": _db_password,
     "database": os.getenv("DB_NAME", "bd_anim3d_saltos"),
     "charset": "utf8mb4",
     "collation": "utf8mb4_unicode_ci",

@@ -76,8 +76,8 @@ def crear():
     if not data:
         return jsonify({"error": "Se esperaba JSON en el body"}), 400
 
-    alias = (data.get("alias") or "").strip()
-    nombre = (data.get("nombre_completo") or "").strip()
+    alias = (data.get("alias") or "").strip()[:50]
+    nombre = (data.get("nombre_completo") or "").strip()[:120]
     altura_str = data.get("altura_m")
 
     if not alias or not nombre or altura_str is None:
@@ -85,10 +85,10 @@ def crear():
 
     try:
         altura = float(altura_str)
-        if altura <= 0:
-            raise ValueError
+        if not (0.50 <= altura <= 2.50):
+            return jsonify({"error": "altura_m debe estar entre 0.50 y 2.50 metros"}), 400
     except (ValueError, TypeError):
-        return jsonify({"error": "altura_m debe ser un número positivo"}), 400
+        return jsonify({"error": "altura_m debe ser un número válido"}), 400
 
     try:
         nuevo_id = _usuario_model.crear(alias, nombre, altura)
@@ -112,8 +112,8 @@ def actualizar(id_usuario):
     if not data:
         return jsonify({"error": "Se esperaba JSON en el body"}), 400
 
-    alias = (data.get("alias") or "").strip()
-    nombre = (data.get("nombre_completo") or "").strip()
+    alias = (data.get("alias") or "").strip()[:50]
+    nombre = (data.get("nombre_completo") or "").strip()[:120]
     altura_str = data.get("altura_m")
 
     if not alias or not nombre or altura_str is None:
@@ -121,10 +121,10 @@ def actualizar(id_usuario):
 
     try:
         altura = float(altura_str)
-        if altura <= 0:
-            raise ValueError
+        if not (0.50 <= altura <= 2.50):
+            return jsonify({"error": "altura_m debe estar entre 0.50 y 2.50 metros"}), 400
     except (ValueError, TypeError):
-        return jsonify({"error": "altura_m debe ser un número positivo"}), 400
+        return jsonify({"error": "altura_m debe ser un número válido"}), 400
 
     try:
         ok = _usuario_model.actualizar(id_usuario, alias, nombre, altura)
