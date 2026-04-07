@@ -40,3 +40,7 @@ CREATE TABLE IF NOT EXISTS saltos (
         FOREIGN KEY (id_usuario) REFERENCES usuarios(id_usuario)
         ON DELETE CASCADE
 ) ENGINE=InnoDB;
+
+-- ── Índice para consultas por usuario ──
+
+CREATE INDEX IF NOT EXISTS idx_saltos_usuario ON saltos(id_usuario);

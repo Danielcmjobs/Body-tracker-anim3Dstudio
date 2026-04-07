@@ -33,6 +33,16 @@ app = Flask(__name__)
 app.config["MAX_CONTENT_LENGTH"] = MAX_UPLOAD_MB * 1024 * 1024
 CORS(app, origins=CORS_ORIGINS)
 
+
+@app.after_request
+def agregar_cabeceras_seguridad(response):
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["X-Frame-Options"] = "DENY"
+    response.headers["X-XSS-Protection"] = "1; mode=block"
+    response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+    return response
+
+
 app.register_blueprint(usuarios_bp)
 app.register_blueprint(saltos_bp)
 
@@ -168,7 +178,7 @@ def calcular_salto():
 
 
 if __name__ == "__main__":
-    print(f"[INFO] Módulo Salto — API disponible en http://localhost:{FLASK_PORT}")
-    print(f"[INFO] POST /api/salto/calcular")
-    print(f"[INFO] CRUD /api/usuarios, /api/saltos")
+    logging.info("Módulo Salto — API disponible en http://localhost:%s", FLASK_PORT)
+    logging.info("POST /api/salto/calcular")
+    logging.info("CRUD /api/usuarios, /api/saltos")
     app.run(host="0.0.0.0", port=FLASK_PORT, debug=False)

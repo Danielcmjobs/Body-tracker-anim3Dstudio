@@ -16,7 +16,7 @@
 - [x] `altura_real_m` obligatorio para ambos tipos de salto (necesario para calibración)
 - [x] API REST expuesta (`POST /api/salto/calcular`) en puerto 5001
 - [x] Frontend web del salto integrado en `integration/web/salto.html`
-- [ ] Cliente móvil para grabar y enviar vídeo (`modules/salto/mobile/`)
+- [ ] Cliente móvil para grabar y enviar vídeo (`modules/salto/mobile/`) — **pendiente, carpeta vacía**
 
 ## Fase 3 — Integración y UI unificada (completada)
 
@@ -36,3 +36,21 @@ Prerequisito: Fases 1 y 2 completadas.
 - [x] Endpoint de comparativa (`GET /api/usuarios/<id>/comparativa`)
 - [x] Estadísticas calculadas al vuelo (mejor, peor, media, último, evolución)
 - [ ] Deploy o empaquetado final
+
+## Fase 4 — Seguridad, validaciones y hardening
+
+- [x] Eliminada contraseña hardcoded de `config.py` — obligatorio `.env`
+- [x] Cabeceras de seguridad HTTP (`X-Content-Type-Options`, `X-Frame-Options`, `X-XSS-Protection`, `Referrer-Policy`)
+- [x] XSS corregido — `innerHTML` con datos de usuario reemplazado por DOM seguro (`textContent`)
+- [x] Errores de BD sanitizados — `IntegrityError` ya no expone detalles del schema
+- [x] Validación de altura 0.50–2.50 m (frontend y backend)
+- [x] Validación de longitud máxima de alias (50) y nombre (120) en backend
+- [x] Validación de tamaño de archivo >100 MB en frontend (antes del upload)
+- [x] `print()` de arranque sustituidos por `logging.info()`
+- [x] Índice `idx_saltos_usuario` en `init_db.sql`
+- [x] Indicador de carga al subir vídeo (con timeout de seguridad)
+- [x] Script `setup.bat` para onboarding de colaboradores
+- [x] `run_all.bat` con pre-checks (venv, .env, imports)
+- [ ] Autenticación de usuarios (JWT o sesiones)
+- [ ] Protección CSRF para endpoints de escritura
+- [ ] Rate limiting en endpoints POST/DELETE

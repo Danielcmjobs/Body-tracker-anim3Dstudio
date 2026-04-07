@@ -7,7 +7,43 @@ REM    - Frontend web     (puerto 8080)
 REM ══════════════════════════════════════════════════════
 
 cd /d "%~dp0.."
-set VENV_PYTHON=%cd%\.venv\Scripts\python.exe
+set PROJECT_ROOT=%cd%
+set VENV_PYTHON=%PROJECT_ROOT%\.venv\Scripts\python.exe
+
+echo.
+echo  === Jump Tracker - Comprobaciones previas ===
+echo.
+
+REM ── Comprobar que el entorno virtual existe ──
+if not exist "%VENV_PYTHON%" (
+    echo  [ERROR] No se encontro el entorno virtual.
+    echo          Ejecuta:  python -m venv .venv
+    echo          Luego:    .\.venv\Scripts\activate ^&^& pip install -r requirements.txt
+    pause
+    exit /b 1
+)
+
+REM ── Comprobar que .env existe ──
+if not exist "%PROJECT_ROOT%\.env" (
+    echo  [ERROR] Falta el archivo .env con la configuracion de base de datos.
+    echo          Copia .env.example a .env y rellena tus credenciales:
+    echo          copy .env.example .env
+    pause
+    exit /b 1
+)
+
+REM ── Comprobar dependencias criticas ──
+"%VENV_PYTHON%" -c "import flask, cv2, mediapipe, mysql.connector, dotenv" 2>nul
+if errorlevel 1 (
+    echo  [AVISO] Faltan dependencias. Instalando...
+    "%VENV_PYTHON%" -m pip install -r "%PROJECT_ROOT%\requirements.txt" --quiet
+    if errorlevel 1 (
+        echo  [ERROR] No se pudieron instalar las dependencias.
+        pause
+        exit /b 1
+    )
+    echo  [OK] Dependencias instaladas.
+)
 
 echo.
 echo  === Jump Tracker - Iniciando servicios ===
@@ -15,15 +51,15 @@ echo.
 
 REM 1) Backend del salto (puerto 5001)
 echo  [1/3] Backend Salto (puerto 5001)...
-start "Backend Salto" cmd /k "cd /d %cd%\modules\salto\backend && %VENV_PYTHON% app.py"
+start "Backend Salto" cmd /k "cd /d %PROJECT_ROOT%\modules\salto\backend && "%VENV_PYTHON%" app.py"
 
 REM 2) Backend del sensor (puerto 5000) — no falla si no hay Arduino
 echo  [2/3] Backend Sensor (puerto 5000)...
-start "Backend Sensor" cmd /k "cd /d %cd%\modules\sensor\backend && %VENV_PYTHON% app.py"
+start "Backend Sensor" cmd /k "cd /d %PROJECT_ROOT%\modules\sensor\backend && "%VENV_PYTHON%" app.py"
 
 REM 3) Frontend web (puerto 8080)
 echo  [3/3] Frontend web (puerto 8080)...
-start "Frontend Web" cmd /k "cd /d %cd%\integration\web && %VENV_PYTHON% -m http.server 8080"
+start "Frontend Web" cmd /k "cd /d %PROJECT_ROOT%\integration\web && "%VENV_PYTHON%" -m http.server 8080"
 
 echo.
 echo  Todo listo. Abre http://localhost:8080 en el navegador.

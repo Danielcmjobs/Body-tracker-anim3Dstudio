@@ -15,10 +15,13 @@ __pycache__/
 dist/
 build/
 
-#Carpetas
+# Carpetas de uploads (archivos temporales de usuario)
 uploads/
 
 # OS
 Thumbs.db
 Desktop.ini
 .DS_Store
+
+# Logs
+*.log

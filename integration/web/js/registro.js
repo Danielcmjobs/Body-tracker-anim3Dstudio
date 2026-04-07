@@ -165,6 +165,12 @@ document.addEventListener('DOMContentLoaded', () => {
             const nombreCompleto = document.getElementById('nombre_completo').value.trim();
             const alturaM = parseFloat(document.getElementById('altura_m').value);
 
+            if (isNaN(alturaM) || alturaM < 0.50 || alturaM > 2.50) {
+                mensajeEstado.textContent = 'La altura debe estar entre 0.50 y 2.50 metros.';
+                mensajeEstado.style.color = '#ffb020';
+                return;
+            }
+
             const textoOriginal = btnSubmit.textContent;
             btnSubmit.textContent = 'Guardando...';
             btnSubmit.disabled = true;
@@ -279,11 +285,13 @@ document.addEventListener('DOMContentLoaded', () => {
             });
         }
 
-        tr.innerHTML = `
-            <td>${u.alias || ''}</td>
-            <td>${u.nombre_completo || ''}</td>
-            <td>${obtenerEdadTexto(u)}</td>
-        `;
+        const tdAlias = document.createElement('td');
+        tdAlias.textContent = u.alias || '';
+        const tdNombre = document.createElement('td');
+        tdNombre.textContent = u.nombre_completo || '';
+        const tdEdad = document.createElement('td');
+        tdEdad.textContent = obtenerEdadTexto(u);
+        tr.append(tdAlias, tdNombre, tdEdad);
 
         tr.addEventListener('click', () => {
             usuarioActivoId = Number(u.id_usuario);
@@ -444,6 +452,11 @@ document.addEventListener('DOMContentLoaded', () => {
 
             if (!alias || !nombre || !(altura > 0)) {
                 setEstado('Completa alias, nombre y altura.', '#ffb020');
+                return;
+            }
+
+            if (altura < 0.50 || altura > 2.50) {
+                setEstado('La altura debe estar entre 0.50 y 2.50 metros.', '#ffb020');
                 return;
             }
 

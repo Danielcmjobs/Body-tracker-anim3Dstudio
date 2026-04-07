@@ -65,6 +65,11 @@ document.addEventListener('DOMContentLoaded', () => {
             return;
         }
 
+        if (error && error.name === '_FileTooLarge') {
+            alert(`El archivo supera el limite de ${MAX_FILE_SIZE_MB} MB. Selecciona un video mas ligero.`);
+            return;
+        }
+
         alert('No se pudo acceder a la camara. Revisa permisos del navegador y vuelve a cargar la pagina.');
     }
 
@@ -134,25 +139,45 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     // --- 3. LÓGICA DE SUBIDA DE ARCHIVO (AL BACKEND PYTHON) ---
+    const MAX_FILE_SIZE_MB = 100;
     if (inputTecnico) {
         inputTecnico.addEventListener('change', (evento) => {
             const archivo = evento.target.files[0];
             
             if (archivo) {
+                if (archivo.size > MAX_FILE_SIZE_MB * 1024 * 1024) {
+                    mostrarGuiaPermisos({ name: '_FileTooLarge' });
+                    inputTecnico.value = '';
+                    return;
+                }
+
                 const textoOriginal = labelVisual.textContent;
                 labelVisual.textContent = 'Enviando al servidor...';
                 labelVisual.style.background = 'rgba(255, 255, 255, 0.3)';
+                labelVisual.classList.add('uploading');
                 
                 // Disparar evento para que api_salto.js envíe el archivo a Python
                 const eventoVideoListo = new CustomEvent('videoListo', { detail: archivo });
                 document.dispatchEvent(eventoVideoListo);
 
-                // Restaurar estética
-                setTimeout(() => {
+                // Restaurar estética cuando termine el procesamiento
+                document.addEventListener('resultadoProcesado', function restaurar() {
                     labelVisual.textContent = textoOriginal;
                     labelVisual.style.background = 'rgba(255, 255, 255, 0.1)';
-                    inputTecnico.value = ''; 
-                }, 2000);
+                    labelVisual.classList.remove('uploading');
+                    inputTecnico.value = '';
+                    document.removeEventListener('resultadoProcesado', restaurar);
+                });
+
+                // Timeout de seguridad por si no llega el evento
+                setTimeout(() => {
+                    if (labelVisual.classList.contains('uploading')) {
+                        labelVisual.textContent = textoOriginal;
+                        labelVisual.style.background = 'rgba(255, 255, 255, 0.1)';
+                        labelVisual.classList.remove('uploading');
+                        inputTecnico.value = '';
+                    }
+                }, 120000);
             }
         });
     }
