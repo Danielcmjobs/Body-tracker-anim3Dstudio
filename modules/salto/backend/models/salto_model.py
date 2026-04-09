@@ -2,6 +2,7 @@
 MODELO — Acceso a datos de la tabla `saltos`.
 """
 
+import json
 import logging
 
 import mysql.connector
@@ -56,6 +57,7 @@ class SaltoModel:
             cls._expr_col(cur, alias, "saltos", "angulo_rodilla_deg"),
             cls._expr_col(cur, alias, "saltos", "angulo_cadera_deg"),
             cls._expr_col(cur, alias, "saltos", "estabilidad_aterrizaje"),
+            cls._expr_col(cur, alias, "saltos", "curvas_json"),
         ]
         return ", ".join(base + extras)
 
@@ -156,6 +158,23 @@ class SaltoModel:
             )
             return cur.fetchall()
 
+    def obtener_curvas_por_id(self, id_salto: int) -> dict | None:
+        """Devuelve solo las curvas angulares almacenadas para un salto."""
+        with get_connection() as (conn, cur):
+            if not self._tiene_columna(cur, "saltos", "curvas_json"):
+                return None
+            cur.execute(
+                "SELECT id_salto, curvas_json FROM saltos WHERE id_salto = %s",
+                (id_salto,),
+            )
+            row = cur.fetchone()
+            if not row:
+                return None
+            raw = row.get("curvas_json")
+            if raw and isinstance(raw, str):
+                row["curvas_json"] = json.loads(raw)
+            return row
+
     def crear(
         self,
         id_usuario: int,
@@ -168,7 +187,8 @@ class SaltoModel:
         asimetria_pct: float | None = None,
         angulo_rodilla_deg: float | None = None,
         angulo_cadera_deg: float | None = None,
-        estabilidad_aterrizaje: float | None = None,
+        estabilidad_aterrizaje: dict | None = None,
+        curvas_json: dict | None = None,
     ) -> int:
         with get_connection() as (conn, cur):
             columnas = ["id_usuario", "tipo_salto", "distancia_cm", "tiempo_vuelo_s", "confianza_ia", "metodo_origen"]
@@ -188,7 +208,10 @@ class SaltoModel:
                 valores.append(angulo_cadera_deg)
             if self._tiene_columna(cur, "saltos", "estabilidad_aterrizaje"):
                 columnas.append("estabilidad_aterrizaje")
-                valores.append(estabilidad_aterrizaje)
+                valores.append(json.dumps(estabilidad_aterrizaje) if estabilidad_aterrizaje else None)
+            if self._tiene_columna(cur, "saltos", "curvas_json"):
+                columnas.append("curvas_json")
+                valores.append(json.dumps(curvas_json) if curvas_json else None)
 
             cols_sql = ", ".join(columnas)
             placeholders = ", ".join(["%s"] * len(columnas))
@@ -235,7 +258,7 @@ class SaltoModel:
         asimetria_pct: float | None = None,
         angulo_rodilla_deg: float | None = None,
         angulo_cadera_deg: float | None = None,
-        estabilidad_aterrizaje: float | None = None,
+        estabilidad_aterrizaje: dict | None = None,
     ) -> bool:
         with get_connection() as (conn, cur):
             sets = [
@@ -261,7 +284,7 @@ class SaltoModel:
                 valores.append(angulo_cadera_deg)
             if self._tiene_columna(cur, "saltos", "estabilidad_aterrizaje"):
                 sets.append("estabilidad_aterrizaje = %s")
-                valores.append(estabilidad_aterrizaje)
+                valores.append(json.dumps(estabilidad_aterrizaje) if estabilidad_aterrizaje is not None else None)
 
             valores.append(id_salto)
             cur.execute(

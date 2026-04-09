@@ -33,7 +33,8 @@ CREATE TABLE IF NOT EXISTS saltos (
     asimetria_pct DECIMAL(6,2)  NULL,
     angulo_rodilla_deg DECIMAL(6,2) NULL,
     angulo_cadera_deg  DECIMAL(6,2) NULL,
-    estabilidad_aterrizaje DECIMAL(6,3) NULL,
+    estabilidad_aterrizaje JSON      NULL,
+    curvas_json           JSON      NULL,
     metodo_origen ENUM('ia_vivo','video_galeria','sensor_arduino') DEFAULT 'video_galeria',
     fecha_salto   DATETIME      DEFAULT CURRENT_TIMESTAMP,
 
@@ -119,7 +120,33 @@ SET @col_exists = (
     WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'saltos' AND COLUMN_NAME = 'estabilidad_aterrizaje'
 );
 SET @sql = IF(@col_exists = 0,
-    'ALTER TABLE saltos ADD COLUMN estabilidad_aterrizaje DECIMAL(6,3) NULL AFTER angulo_cadera_deg',
+    'ALTER TABLE saltos ADD COLUMN estabilidad_aterrizaje JSON NULL AFTER angulo_cadera_deg',
+    'SELECT 1'
+);
+PREPARE stmt FROM @sql;
+EXECUTE stmt;
+DEALLOCATE PREPARE stmt;
+
+-- Migrar estabilidad_aterrizaje de DECIMAL a JSON si necesario
+SET @col_type = (
+    SELECT DATA_TYPE FROM INFORMATION_SCHEMA.COLUMNS
+    WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'saltos' AND COLUMN_NAME = 'estabilidad_aterrizaje'
+);
+SET @sql = IF(@col_type = 'decimal',
+    'ALTER TABLE saltos MODIFY COLUMN estabilidad_aterrizaje JSON NULL',
+    'SELECT 1'
+);
+PREPARE stmt FROM @sql;
+EXECUTE stmt;
+DEALLOCATE PREPARE stmt;
+
+-- Migración: añadir curvas_json (Fase 8.2 — comparación de intentos)
+SET @col_exists = (
+    SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
+    WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'saltos' AND COLUMN_NAME = 'curvas_json'
+);
+SET @sql = IF(@col_exists = 0,
+    'ALTER TABLE saltos ADD COLUMN curvas_json JSON NULL AFTER estabilidad_aterrizaje',
     'SELECT 1'
 );
 PREPARE stmt FROM @sql;
