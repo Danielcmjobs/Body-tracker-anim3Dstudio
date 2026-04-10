@@ -38,6 +38,8 @@ class ResultadoSalto:
     fases_salto: list | None = None
     velocidades_articulares: dict | None = None
     resumen_gesto: dict | None = None
+    # Fase 12 — Soporte slow-motion
+    slowmo_factor: float | None = None
 
 
 class CalculoService:
@@ -74,7 +76,9 @@ class CalculoService:
 
         angulo_rodilla, angulo_cadera = self._calcular_angulos_despegue(frames, despegue)
 
-        tiempo_vuelo = max(0.0, (aterrizaje - despegue) / fps)
+        tiempo_vuelo_frames = max(0.0, (aterrizaje - despegue) / fps)
+        slowmo = self._estimar_slowmo(frames, despegue, aterrizaje, fps, altura_real_m)
+        tiempo_vuelo = tiempo_vuelo_frames / slowmo if slowmo > 1.0 else tiempo_vuelo_frames
 
         # ── Método 1: Cinemática ──
         altura_cin_cm = (1 / 8) * GRAVEDAD * (tiempo_vuelo ** 2) * 100
@@ -151,6 +155,7 @@ class CalculoService:
             potencia_w=potencia_w,
             asimetria_pct=asimetria_pct,
             estabilidad_aterrizaje=estabilidad,
+            slowmo_factor=round(slowmo, 2) if slowmo > 1.0 else None,
         )
 
     def calcular_horizontal(
@@ -207,7 +212,9 @@ class CalculoService:
         # D_real = Dp * S  →  en metros, convertir a cm
         distancia_m = desplazamiento_px * factor_escala
         distancia_cm = max(0.0, distancia_m * 100)
-        tiempo_vuelo = (aterrizaje - despegue) / fps
+        tiempo_vuelo_frames = (aterrizaje - despegue) / fps
+        slowmo = self._estimar_slowmo(frames, despegue, aterrizaje, fps, altura_real_m)
+        tiempo_vuelo = tiempo_vuelo_frames / slowmo if slowmo > 1.0 else tiempo_vuelo_frames
 
         # Guardarraíl para evitar valores colapsados por detección espuria.
         if tiempo_vuelo > 0.12 and distancia_cm < 5:
@@ -231,6 +238,7 @@ class CalculoService:
             potencia_w=potencia_w,
             asimetria_pct=asimetria_pct,
             estabilidad_aterrizaje=estabilidad,
+            slowmo_factor=round(slowmo, 2) if slowmo > 1.0 else None,
         )
 
     def _detectar_vuelo(self, frames: list[FramePies], tipo_salto: str, fps: float) -> tuple[int | None, int | None, float]:
@@ -320,12 +328,32 @@ class CalculoService:
             despegue, aterrizaje = self._detectar_vuelo_legacy(y_suave, fps, tipo_salto)
 
         if despegue is None or aterrizaje is None:
+            despegue, aterrizaje = self._detectar_vuelo_por_pico(y_suave, fps, frames)
+
+        if despegue is None or aterrizaje is None:
             return None, None, 0.0
 
-        # Validación temporal para descartar falsos positivos muy cortos.
+        # Validación temporal para descartar falsos positivos.
         tiempo_vuelo = (aterrizaje - despegue) / fps if fps > 0 else 0.0
-        if tiempo_vuelo < 0.05 or tiempo_vuelo > 2.0:
+
+        if tiempo_vuelo < 0.05:
             return None, None, 0.0
+
+        if tiempo_vuelo > 2.0:
+            # Posible slow-motion: validar con elevación real de píxeles.
+            elevacion_px = float(y_base - np.min(y_suave[despegue:aterrizaje + 1]))
+            min_elevacion = (altura_ref * 0.02) if altura_ref and altura_ref > 0 else 3.0
+
+            if elevacion_px >= min_elevacion:
+                # Elevación significativa + duración larga = slow-motion, aceptar.
+                pass
+            else:
+                # Sin elevación real, intentar detector por pico.
+                desp_pico, aterr_pico = self._detectar_vuelo_por_pico(y_suave, fps, frames)
+                if desp_pico is not None and aterr_pico is not None:
+                    despegue, aterrizaje = desp_pico, aterr_pico
+                else:
+                    return None, None, 0.0
 
         frames_vuelo = frames[despegue:aterrizaje + 1]
         detectados = sum(1 for f in frames_vuelo if f.talon_izq_y is not None or f.talon_der_y is not None)
@@ -351,6 +379,115 @@ class CalculoService:
                     if derivada[j] > umbral:
                         return i, j + 1
         return None, None
+
+    def _detectar_vuelo_por_pico(
+        self,
+        y_suave: np.ndarray,
+        fps: float,
+        frames: list[FramePies],
+    ) -> tuple[int | None, int | None]:
+        """
+        Fallback basado en el pico del salto (mínimo Y = pies más altos).
+
+        Funciona con carreras de aproximación donde el baseline inicial
+        no es representativo del suelo. Busca el pico más prominente
+        y trabaja hacia fuera para encontrar despegue y aterrizaje
+        usando niveles de suelo locales.
+        """
+        if y_suave is None or len(y_suave) < 10:
+            return None, None
+
+        # 1. Encontrar el pico (mínimo Y = pies más arriba)
+        idx_pico = int(np.argmin(y_suave))
+        y_pico = float(y_suave[idx_pico])
+
+        # Necesitamos frames antes y después del pico
+        if idx_pico < 3 or idx_pico > len(y_suave) - 4:
+            return None, None
+
+        # 2. Nivel de suelo local: máximo Y antes y después del pico
+        y_suelo_pre = float(np.max(y_suave[:idx_pico]))
+        y_suelo_post = float(np.max(y_suave[idx_pico:]))
+
+        # 3. La elevación debe ser significativa (>5% de la altura de la persona)
+        elevacion = min(y_suelo_pre, y_suelo_post) - y_pico
+        altura_ref = self._altura_referencia_px(frames)
+        min_elevacion = (altura_ref * 0.05) if altura_ref and altura_ref > 0 else 5.0
+        if elevacion < min_elevacion:
+            return None, None
+
+        # 4. Despegue: yendo hacia atrás desde el pico, buscar donde Y
+        #    está al 85% del nivel de suelo pre-salto (15% ya elevado)
+        umbral_desp = y_suelo_pre - (y_suelo_pre - y_pico) * 0.15
+        despegue = idx_pico
+        for i in range(idx_pico - 1, -1, -1):
+            if y_suave[i] >= umbral_desp:
+                despegue = i
+                break
+
+        # 5. Aterrizaje: yendo hacia adelante desde el pico, buscar donde Y
+        #    vuelve al 85% del nivel de suelo post-salto
+        umbral_aterr = y_suelo_post - (y_suelo_post - y_pico) * 0.15
+        aterrizaje = idx_pico
+        for i in range(idx_pico + 1, len(y_suave)):
+            if y_suave[i] >= umbral_aterr:
+                aterrizaje = i
+                break
+
+        if despegue == aterrizaje:
+            return None, None
+
+        return despegue, aterrizaje
+
+    def _estimar_slowmo(
+        self,
+        frames: list[FramePies],
+        despegue: int,
+        aterrizaje: int,
+        fps: float,
+        altura_real_m: float,
+    ) -> float:
+        """
+        Estima el factor de slow-motion comparando el tiempo basado en frames
+        con el tiempo físico predicho por la elevación vertical.
+
+        Usa h = (1/8) * g * t²  →  t_real = sqrt(8*h/g)
+
+        Retorna factor >= 1.0 (1.0 = tiempo real, 2.0 = 2× cámara lenta, etc.)
+        """
+        tiempo_frames = (aterrizaje - despegue) / fps if fps > 0 else 0.0
+        if tiempo_frames <= 0.05:
+            return 1.0
+
+        altura_px = self._buscar_altura_px(frames, despegue)
+        if not altura_px or altura_px <= 0:
+            return 1.0
+
+        factor_escala = altura_real_m / altura_px  # metros por píxel
+
+        y_suelo = self._promedio_y_pies(frames[despegue])
+        y_pico = None
+        for i in range(despegue, min(aterrizaje + 1, len(frames))):
+            y = self._promedio_y_pies(frames[i])
+            if y is not None and (y_pico is None or y < y_pico):
+                y_pico = y
+
+        if y_suelo is None or y_pico is None:
+            return 1.0
+
+        elevacion_px = y_suelo - y_pico
+        if elevacion_px <= 0:
+            return 1.0
+
+        elevacion_m = elevacion_px * factor_escala
+
+        # Física: h = (1/8) * g * t²  →  t = sqrt(8h / g)
+        t_fisico = (8.0 * elevacion_m / GRAVEDAD) ** 0.5
+        if t_fisico < 0.05:
+            return 1.0
+
+        factor = tiempo_frames / t_fisico
+        return max(1.0, factor)
 
     def _interpolar_nones(self, valores: list[float | None]) -> np.ndarray | None:
         """Reemplaza Nones con interpolación lineal. Devuelve None si todo es None."""
@@ -405,6 +542,50 @@ class CalculoService:
         if valor_cm is None:
             return False
         return 5.0 <= float(valor_cm) <= 180.0
+
+    def detectar_tipo_salto(self, frames: list[FramePies], fps: float) -> str:
+        """
+        Analiza el patrón de movimiento real del vídeo y devuelve
+        'vertical' u 'horizontal' según lo que se observa.
+
+        Heurística: compara el desplazamiento neto en Y (pies subiendo)
+        versus el desplazamiento neto en X (pies avanzando).
+        Si Y >> X, el salto es vertical.
+        """
+        despegue, aterrizaje, _ = self._detectar_vuelo(frames, "horizontal", fps)
+        if despegue is None or aterrizaje is None:
+            return "vertical"
+
+        # Desplazamiento Y: diferencia entre posición de apoyo y pico más alto
+        ys = []
+        for f in frames[despegue:aterrizaje + 1]:
+            y = self._promedio_y_pies(f)
+            if y is not None:
+                ys.append(y)
+        delta_y = (max(ys) - min(ys)) if len(ys) >= 2 else 0.0
+
+        # Desplazamiento X: posición pre-salto vs post-salto
+        pre_xs = []
+        for i in range(max(0, despegue - 10), despegue):
+            x = self._x_representativo(frames[i])
+            if x is not None:
+                pre_xs.append(x)
+        post_xs = []
+        for i in range(aterrizaje + 1, min(len(frames), aterrizaje + 11)):
+            x = self._x_representativo(frames[i])
+            if x is not None:
+                post_xs.append(x)
+
+        if pre_xs and post_xs:
+            delta_x = abs(float(np.mean(post_xs)) - float(np.mean(pre_xs)))
+        else:
+            delta_x = 0.0
+
+        # Si el movimiento vertical es >5x el horizontal, es un salto vertical
+        if delta_y > 0 and (delta_x < 1.0 or delta_y / max(delta_x, 0.01) > 5.0):
+            return "vertical"
+
+        return "horizontal"
 
     def _x_representativo(self, frame: FramePies) -> float | None:
         x_pies = self._promedio_x_pies(frame)

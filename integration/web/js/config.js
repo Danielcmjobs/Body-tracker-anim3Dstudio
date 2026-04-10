@@ -13,7 +13,8 @@ function getCurrentHost() {
 }
 
 function getBackendBaseUrl() {
-    return `http://${getCurrentHost()}:${BACKEND_SALTO_PORT}`;
+    const protocol = window.location.protocol === 'https:' ? 'https' : 'http';
+    return `${protocol}://${getCurrentHost()}:${BACKEND_SALTO_PORT}`;
 }
 
 function getSensorBaseUrl() {

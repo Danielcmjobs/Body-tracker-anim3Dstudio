@@ -19,7 +19,7 @@ from datetime import datetime
 from dotenv import load_dotenv
 load_dotenv()  # carga .env antes de importar config
 
-from flask import Flask, jsonify, request, send_file
+from flask import Flask, Response, jsonify, request, send_file
 from flask_cors import CORS
 from werkzeug.utils import secure_filename
 
@@ -160,22 +160,30 @@ def calcular_salto():
             except (ValueError, TypeError, KeyError):
                 logging.warning("No se pudo calcular contexto histórico para interpretación del salto")
 
-        alertas = generar_alertas_salto(
-            angulo_rodilla_deg=resultado.angulo_rodilla_deg,
-            angulo_cadera_deg=resultado.angulo_cadera_deg,
-            asimetria_pct=resultado.asimetria_pct,
-            confianza=resultado.confianza,
-        )
-        observaciones = generar_observaciones(
-            distancia_cm=float(resultado.distancia or 0),
-            media_historica_cm=media_historica_cm,
-            angulo_cadera_deg=resultado.angulo_cadera_deg,
-        )
-        clasificacion = clasificar_salto(
-            alertas=alertas,
-            asimetria_pct=resultado.asimetria_pct,
-            fatiga_significativa=fatiga_significativa,
-        )
+        # Si no se detectó salto válido, no generar interpretación engañosa
+        if resultado.distancia <= 0:
+            alertas = []
+            observaciones = ["No se detectó un salto válido en el vídeo. "
+                            "Asegúrate de que se vea el cuerpo completo (cabeza a pies), "
+                            "con cámara fija y vista lateral."]
+            clasificacion = "no_detectado"
+        else:
+            alertas = generar_alertas_salto(
+                angulo_rodilla_deg=resultado.angulo_rodilla_deg,
+                angulo_cadera_deg=resultado.angulo_cadera_deg,
+                asimetria_pct=resultado.asimetria_pct,
+                confianza=resultado.confianza,
+            )
+            observaciones = generar_observaciones(
+                distancia_cm=float(resultado.distancia or 0),
+                media_historica_cm=media_historica_cm,
+                angulo_cadera_deg=resultado.angulo_cadera_deg,
+            )
+            clasificacion = clasificar_salto(
+                alertas=alertas,
+                asimetria_pct=resultado.asimetria_pct,
+                fatiga_significativa=fatiga_significativa,
+            )
 
         respuesta = {
             "tipo_salto": resultado.tipo_salto,
@@ -201,6 +209,8 @@ def calcular_salto():
             "fases_salto": resultado.fases_salto,
             "velocidades_articulares": resultado.velocidades_articulares,
             "resumen_gesto": resultado.resumen_gesto,
+            # Fase 12 — Soporte slow-motion
+            "slowmo_factor": resultado.slowmo_factor,
             # Fase 9 — Interpretación automática
             "alertas": alertas,
             "observaciones": observaciones,
@@ -331,24 +341,40 @@ def video_anotado():
         if not exito:
             return jsonify({"error": "No se pudo generar el vídeo anotado"}), 500
 
-        return send_file(
-            ruta_salida,
+        # Leer a memoria antes de eliminar para evitar PermissionError en Windows
+        with open(ruta_salida, "rb") as f:
+            video_bytes = f.read()
+
+        return Response(
+            video_bytes,
             mimetype="video/mp4",
-            as_attachment=True,
-            download_name="salto_anotado.mp4",
+            headers={
+                "Content-Disposition": 'attachment; filename="salto_anotado.mp4"',
+                "Content-Length": str(len(video_bytes)),
+            },
         )
     except Exception:
         logging.exception("Error generando vídeo anotado")
         return jsonify({"error": "Error interno al generar el vídeo anotado"}), 500
     finally:
         for ruta in [ruta_entrada, ruta_salida]:
-            if os.path.exists(ruta):
-                os.remove(ruta)
+            try:
+                if os.path.exists(ruta):
+                    os.remove(ruta)
+            except OSError:
+                pass
 
 
 if __name__ == "__main__":
-    logging.info("Módulo Salto — API disponible en http://localhost:%s", FLASK_PORT)
+    # Buscar certificados SSL para servir por HTTPS (necesario para cámara en móvil)
+    _project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
+    _cert = os.path.join(_project_root, "certs", "cert.pem")
+    _key = os.path.join(_project_root, "certs", "key.pem")
+    _ssl_context = (_cert, _key) if os.path.exists(_cert) and os.path.exists(_key) else None
+
+    _protocol = "https" if _ssl_context else "http"
+    logging.info("Módulo Salto — API disponible en %s://localhost:%s", _protocol, FLASK_PORT)
     logging.info("POST /api/salto/calcular")
     logging.info("POST /api/salto/video-anotado")
     logging.info("CRUD /api/usuarios, /api/saltos")
-    app.run(host="0.0.0.0", port=FLASK_PORT, debug=False)
+    app.run(host="0.0.0.0", port=FLASK_PORT, debug=False, ssl_context=_ssl_context)
