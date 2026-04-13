@@ -33,6 +33,11 @@ let mediaRecorder = null;
 let chunksGrabacion = [];
 let stopRecorderResolver = null;
 let toastTimer = null;
+// Buffer local de landmarks capturados en tiempo real.
+// Se usa como respaldo cuando la respuesta del backend no trae landmarks.
+let landmarksFramesLocalBuffer = [];
+let landmarksFrameSeq = 0;
+const MAX_LANDMARKS_LOCAL_FRAMES = 1500;
 
 const SALTOS_OBJETIVO_COMPARATIVA = 4;
 let medidasComparativa = [];
@@ -42,6 +47,32 @@ let graficaCorrPesoPotencia = null;
 let graficaCorrAsimEstabilidad = null;
 let ultimaAlertaFatigaClave = '';
 const CHART_BOX_HEIGHT_PX = 220;
+
+// Mapa explicito de conexiones del esqueleto (33 puntos de MediaPipe Pose).
+// Se reutiliza tanto en el render 2D como en el render 3D.
+const POSE_CONNECTIONS_33 = [
+    [0, 1], [1, 2], [2, 3], [3, 7],
+    [0, 4], [4, 5], [5, 6], [6, 8],
+    [9, 10],
+    [11, 12], [11, 13], [13, 15], [15, 17], [15, 19], [15, 21], [17, 19],
+    [12, 14], [14, 16], [16, 18], [16, 20], [16, 22], [18, 20],
+    [11, 23], [12, 24], [23, 24], [23, 25], [24, 26],
+    [25, 27], [26, 28], [27, 29], [28, 30], [29, 31], [30, 32],
+    [27, 31], [28, 32]
+];
+
+// Cache de landmarks por id_salto para evitar recargas repetidas al backend.
+const landmarksCache = new Map();
+// Promesa singleton para cargar dependencias 3D solo una vez.
+let threeDepsPromise = null;
+// Estado central del visor de landmarks (modo, frame activo e instancia 3D).
+const landmarksViewerState = {
+    idSalto: null,
+    frames: [],
+    currentFrame: 0,
+    mode: '2d',
+    three: null
+};
 
 function fijarTamanoGraficasAnalitica() {
     const wrapperIds = [
@@ -248,6 +279,155 @@ function normalizarNumeroOpcional(valor) {
     return Number.isFinite(n) ? n : null;
 }
 
+// Heuristicas locales minimas para no perder clasificacion/alertas
+// cuando el backend no devuelve insights completos.
+function construirInsightsLocales(datos) {
+    const alertas = [];
+    const observaciones = [];
+
+    const angRod = normalizarNumeroOpcional(datos?.angulo_rodilla_deg);
+    const angCad = normalizarNumeroOpcional(datos?.angulo_cadera_deg);
+    const asim = normalizarNumeroOpcional(datos?.asimetria_pct);
+    const conf = normalizarNumeroOpcional(datos?.confianza);
+
+    if (angRod !== null && angRod >= 165) {
+        alertas.push({
+            codigo: 'amortiguacion_insuficiente',
+            mensaje: 'Amortiguacion insuficiente detectada (recepcion rigida).',
+            severidad: 'media'
+        });
+    }
+    if (angCad !== null && angCad < 145) {
+        alertas.push({
+            codigo: 'extension_cadera_limitada',
+            mensaje: 'Extension de cadera limitada en el despegue.',
+            severidad: 'media'
+        });
+    }
+    if (asim !== null && asim > 15) {
+        alertas.push({
+            codigo: 'desequilibrio_recepcion',
+            mensaje: 'Asimetria superior al 15% en la recepcion.',
+            severidad: 'alta'
+        });
+    }
+    if (conf !== null && conf < 0.6) {
+        alertas.push({
+            codigo: 'recepcion_inestable',
+            mensaje: 'Confianza baja; revisa encuadre e iluminacion.',
+            severidad: 'media'
+        });
+    }
+
+    if (alertas.length === 0) {
+        observaciones.push('Tecnica estable sin desviaciones relevantes en este intento.');
+    } else {
+        observaciones.push('Se detectaron alertas; repite con mejor encuadre para confirmar.');
+    }
+
+    let clasificacion = 'tecnicamente_correcto';
+    if (asim !== null && asim > 15) {
+        clasificacion = 'asimetrico';
+    } else if (alertas.length > 0) {
+        clasificacion = 'equilibrado';
+    }
+
+    return { alertas, observaciones, clasificacion };
+}
+
+// Fusion robusta backend + local:
+// - Prioriza datos backend cuando existen.
+// - Mantiene distancia local si backend devuelve 0 y local es valida.
+// - Preserva campos avanzados y dispara enriquecimiento local si faltan.
+function combinarResultadoConFallback(payload, datosLocales) {
+    const distanciaPayload = normalizarNumeroOpcional(payload?.distancia);
+    const distanciaLocal = normalizarNumeroOpcional(datosLocales?.distancia);
+    const usarDistanciaLocal = (distanciaPayload !== null && distanciaPayload <= 0)
+        && (distanciaLocal !== null && distanciaLocal > 0);
+
+    const combinado = {
+        ...payload,
+        distancia: usarDistanciaLocal ? distanciaLocal : (distanciaPayload ?? distanciaLocal ?? 0),
+        unidad: payload?.unidad || datosLocales?.unidad || 'cm',
+        tipo_salto: payload?.tipo_salto || datosLocales?.tipo_salto || modoSalto,
+        confianza: normalizarNumeroOpcional(payload?.confianza) ?? normalizarNumeroOpcional(datosLocales?.confianza) ?? 0,
+        tiempo_vuelo_s: normalizarNumeroOpcional(payload?.tiempo_vuelo_s) ?? normalizarNumeroOpcional(datosLocales?.tiempo_vuelo_s),
+        frame_despegue: payload?.frame_despegue ?? datosLocales?.frame_despegue ?? null,
+        frame_aterrizaje: payload?.frame_aterrizaje ?? datosLocales?.frame_aterrizaje ?? null,
+    };
+
+    const landmarksPayload = _normalizarFramesLandmarks(payload?.landmarks_frames || []);
+    const landmarksLocal = _normalizarFramesLandmarks(datosLocales?.landmarks_frames || []);
+    combinado.landmarks_frames = landmarksPayload.length > 0 ? landmarksPayload : landmarksLocal;
+
+    const potenciaPayload = normalizarNumeroOpcional(payload?.potencia_w);
+    const asimetriaPayload = normalizarNumeroOpcional(payload?.asimetria_pct);
+    const estabilidadPayload = normalizarNumeroOpcional(payload?.estabilidad_aterrizaje);
+    const potenciaLocal = normalizarNumeroOpcional(datosLocales?.potencia_w);
+    const asimetriaLocal = normalizarNumeroOpcional(datosLocales?.asimetria_pct);
+    const estabilidadLocal = normalizarNumeroOpcional(datosLocales?.estabilidad_aterrizaje);
+
+    combinado.potencia_w = potenciaPayload ?? potenciaLocal;
+    combinado.asimetria_pct = asimetriaPayload ?? asimetriaLocal;
+    combinado.estabilidad_aterrizaje = estabilidadPayload ?? estabilidadLocal;
+    combinado.angulo_rodilla_deg = normalizarNumeroOpcional(payload?.angulo_rodilla_deg)
+        ?? normalizarNumeroOpcional(datosLocales?.angulo_rodilla_deg);
+    combinado.angulo_cadera_deg = normalizarNumeroOpcional(payload?.angulo_cadera_deg)
+        ?? normalizarNumeroOpcional(datosLocales?.angulo_cadera_deg);
+
+    if (!Array.isArray(combinado.alertas) || typeof combinado.clasificacion !== 'string' || !combinado.clasificacion) {
+        const insights = construirInsightsLocales(combinado);
+        combinado.alertas = Array.isArray(combinado.alertas) ? combinado.alertas : insights.alertas;
+        combinado.observaciones = Array.isArray(combinado.observaciones) ? combinado.observaciones : insights.observaciones;
+        if (!combinado.clasificacion) {
+            combinado.clasificacion = insights.clasificacion;
+        }
+    }
+
+    const necesitaAnalisisLocal = !combinado.curvas_angulares
+        || !Array.isArray(combinado.curvas_angulares?.rodilla_deg)
+        || !Array.isArray(combinado.fases_salto)
+        || !combinado.resumen_gesto
+        || !combinado.amortiguacion
+        || !combinado.estabilidad_detalle;
+
+    if (necesitaAnalisisLocal) {
+        enriquecerAnalisisDesdeLandmarks(combinado);
+    }
+
+    return combinado;
+}
+
+// Punto unico de normalizacion para UI.
+// Garantiza paridad entre flujo de tiempo real y flujo de video de galeria.
+function normalizarResultadoParaUI(payload, datosLocales = null) {
+    const basePayload = (payload && typeof payload === 'object') ? payload : {};
+    const baseLocales = (datosLocales && typeof datosLocales === 'object') ? datosLocales : {};
+
+    const localesParaMerge = {
+        distancia: normalizarNumeroOpcional(baseLocales.distancia) ?? normalizarNumeroOpcional(basePayload.distancia),
+        unidad: baseLocales.unidad || basePayload.unidad,
+        tipo_salto: baseLocales.tipo_salto || basePayload.tipo_salto,
+        confianza: normalizarNumeroOpcional(baseLocales.confianza) ?? normalizarNumeroOpcional(basePayload.confianza),
+        tiempo_vuelo_s: normalizarNumeroOpcional(baseLocales.tiempo_vuelo_s) ?? normalizarNumeroOpcional(basePayload.tiempo_vuelo_s),
+        frame_despegue: baseLocales.frame_despegue ?? basePayload.frame_despegue,
+        frame_aterrizaje: baseLocales.frame_aterrizaje ?? basePayload.frame_aterrizaje,
+        potencia_w: normalizarNumeroOpcional(baseLocales.potencia_w) ?? normalizarNumeroOpcional(basePayload.potencia_w),
+        asimetria_pct: normalizarNumeroOpcional(baseLocales.asimetria_pct) ?? normalizarNumeroOpcional(basePayload.asimetria_pct),
+        estabilidad_aterrizaje: normalizarNumeroOpcional(baseLocales.estabilidad_aterrizaje)
+            ?? normalizarNumeroOpcional(basePayload.estabilidad_aterrizaje),
+        angulo_rodilla_deg: normalizarNumeroOpcional(baseLocales.angulo_rodilla_deg)
+            ?? normalizarNumeroOpcional(basePayload.angulo_rodilla_deg),
+        angulo_cadera_deg: normalizarNumeroOpcional(baseLocales.angulo_cadera_deg)
+            ?? normalizarNumeroOpcional(basePayload.angulo_cadera_deg),
+        landmarks_frames: Array.isArray(baseLocales.landmarks_frames)
+            ? baseLocales.landmarks_frames
+            : (Array.isArray(basePayload.landmarks_frames) ? basePayload.landmarks_frames : [])
+    };
+
+    return combinarResultadoConFallback(basePayload, localesParaMerge);
+}
+
 function anguloEntreVectoresDeg(v1, v2) {
     const dot = (v1.x * v2.x) + (v1.y * v2.y);
     const cross = (v1.x * v2.y) - (v1.y * v2.x);
@@ -300,6 +480,259 @@ function calcularAngulosDespegueDesdeLandmarks(landmarks) {
         angulo_rodilla_deg: anguloEntreVectoresDeg(vCaderaRodilla, vTobilloRodilla),
         angulo_cadera_deg: anguloEntreVectoresDeg(vHombroCadera, vRodillaCadera)
     };
+}
+
+// Estima FPS real a partir de timestamps de landmarks para analisis local.
+function estimarFpsDesdeLandmarksFrames(frames) {
+    if (!Array.isArray(frames) || frames.length < 2) {
+        return 30;
+    }
+
+    const deltas = [];
+    for (let i = 1; i < frames.length; i += 1) {
+        const t0 = normalizarNumeroOpcional(frames[i - 1]?.timestamp_s);
+        const t1 = normalizarNumeroOpcional(frames[i]?.timestamp_s);
+        if (t0 === null || t1 === null) {
+            continue;
+        }
+        const dt = t1 - t0;
+        if (dt > 0) {
+            deltas.push(dt);
+        }
+    }
+    if (deltas.length === 0) {
+        return 30;
+    }
+    deltas.sort((a, b) => a - b);
+    const mediana = deltas[Math.floor(deltas.length / 2)] || 1 / 30;
+    const fps = 1 / mediana;
+    return Number.isFinite(fps) && fps > 0 ? fps : 30;
+}
+
+function extraerYMedioPies(landmarks) {
+    const y1 = normalizarNumeroOpcional(landmarks?.[27]?.y);
+    const y2 = normalizarNumeroOpcional(landmarks?.[28]?.y);
+    if (y1 === null && y2 === null) {
+        return null;
+    }
+    if (y1 === null) {
+        return y2;
+    }
+    if (y2 === null) {
+        return y1;
+    }
+    return (y1 + y2) / 2;
+}
+
+function estimarDespegueAterrizajeLocal(frames) {
+    if (!Array.isArray(frames) || frames.length < 8) {
+        return { despegue: null, aterrizaje: null };
+    }
+
+    const y = frames.map((f) => extraerYMedioPies(f?.landmarks));
+    const validos = y.filter((v) => v !== null);
+    if (validos.length < 8) {
+        return { despegue: null, aterrizaje: null };
+    }
+
+    const nBase = Math.max(6, Math.min(30, Math.floor(validos.length * 0.25)));
+    const base = validos.slice(0, nBase).reduce((a, b) => a + b, 0) / nBase;
+    const umbral = base - 0.02;
+
+    let despegue = null;
+    let aterrizaje = null;
+    let enAire = false;
+
+    for (let i = 0; i < y.length; i += 1) {
+        const yi = y[i];
+        if (yi === null) {
+            continue;
+        }
+        if (!enAire && yi < umbral) {
+            enAire = true;
+            despegue = i;
+            continue;
+        }
+        if (enAire && yi >= umbral) {
+            aterrizaje = i;
+            break;
+        }
+    }
+
+    if (despegue === null || aterrizaje === null || aterrizaje <= despegue) {
+        return { despegue: null, aterrizaje: null };
+    }
+
+    return { despegue, aterrizaje };
+}
+
+// Reconstruye analisis avanzado desde landmarks cuando el payload llega incompleto:
+// curvas, fases, resumen de gesto, velocidad articular y metrica de aterrizaje.
+function enriquecerAnalisisDesdeLandmarks(resultado) {
+    const frames = _normalizarFramesLandmarks(resultado?.landmarks_frames || []);
+    if (!Array.isArray(frames) || frames.length < 8) {
+        return;
+    }
+
+    const fps = estimarFpsDesdeLandmarksFrames(frames);
+    let frameDespegue = Number.isFinite(Number(resultado?.frame_despegue)) ? Number(resultado.frame_despegue) : null;
+    let frameAterrizaje = Number.isFinite(Number(resultado?.frame_aterrizaje)) ? Number(resultado.frame_aterrizaje) : null;
+
+    if (frameDespegue === null || frameAterrizaje === null || frameAterrizaje <= frameDespegue) {
+        const est = estimarDespegueAterrizajeLocal(frames);
+        frameDespegue = est.despegue;
+        frameAterrizaje = est.aterrizaje;
+        if (frameDespegue !== null && frameAterrizaje !== null) {
+            resultado.frame_despegue = frameDespegue;
+            resultado.frame_aterrizaje = frameAterrizaje;
+            if (normalizarNumeroOpcional(resultado.tiempo_vuelo_s) === null) {
+                resultado.tiempo_vuelo_s = Number(((frameAterrizaje - frameDespegue) / fps).toFixed(3));
+            }
+        }
+    }
+
+    const indices = [];
+    const rodilla = [];
+    const cadera = [];
+
+    for (let i = 0; i < frames.length; i += 1) {
+        const lm = frames[i]?.landmarks;
+        const ang = calcularAngulosDespegueDesdeLandmarks(lm);
+        indices.push(i);
+        rodilla.push(normalizarNumeroOpcional(ang?.angulo_rodilla_deg));
+        cadera.push(normalizarNumeroOpcional(ang?.angulo_cadera_deg));
+    }
+
+    const hayCurvas = rodilla.some((v) => v !== null) && cadera.some((v) => v !== null);
+    if ((!resultado.curvas_angulares || !Array.isArray(resultado.curvas_angulares.rodilla_deg)) && hayCurvas) {
+        resultado.curvas_angulares = {
+            indices,
+            rodilla_deg: rodilla,
+            cadera_deg: cadera
+        };
+    }
+
+    const rodVal = rodilla.filter((v) => v !== null);
+    const cadVal = cadera.filter((v) => v !== null);
+
+    if (!resultado.resumen_gesto && rodVal.length > 0 && cadVal.length > 0) {
+        const romRod = Math.max(...rodVal) - Math.min(...rodVal);
+        const romCad = Math.max(...cadVal) - Math.min(...cadVal);
+        resultado.resumen_gesto = {
+            rom_rodilla_deg: Number(romRod.toFixed(2)),
+            rom_cadera_deg: Number(romCad.toFixed(2)),
+            ratio_excentrico_concentrico: null
+        };
+    }
+
+    if (!resultado.velocidades_articulares && rodVal.length > 1) {
+        let maxVel = 0;
+        let idxVel = 0;
+        for (let i = 1; i < rodilla.length; i += 1) {
+            const a0 = rodilla[i - 1];
+            const a1 = rodilla[i];
+            if (a0 === null || a1 === null) {
+                continue;
+            }
+            const vel = Math.abs((a1 - a0) * fps);
+            if (vel > maxVel) {
+                maxVel = vel;
+                idxVel = i;
+            }
+        }
+        resultado.velocidades_articulares = {
+            pico_vel_rodilla: {
+                valor_deg_s: Number(maxVel.toFixed(1)),
+                frame_idx: idxVel
+            }
+        };
+    }
+
+    if ((!resultado.fases_salto || !Array.isArray(resultado.fases_salto) || resultado.fases_salto.length === 0)
+        && frameDespegue !== null && frameAterrizaje !== null && frameAterrizaje > frameDespegue) {
+        const prepIni = Math.max(0, frameDespegue - Math.max(4, Math.floor(fps * 0.2)));
+        const impIni = Math.max(prepIni, frameDespegue - Math.max(2, Math.floor(fps * 0.08)));
+        const recepFin = Math.min(frames.length - 1, frameAterrizaje + Math.max(6, Math.floor(fps * 0.25)));
+        resultado.fases_salto = [
+            { fase: 'preparatoria', frame_inicio: prepIni, frame_fin: Math.max(prepIni, impIni - 1) },
+            { fase: 'impulsion', frame_inicio: impIni, frame_fin: frameDespegue },
+            { fase: 'vuelo', frame_inicio: frameDespegue, frame_fin: frameAterrizaje },
+            { fase: 'recepcion', frame_inicio: frameAterrizaje, frame_fin: recepFin }
+        ];
+    }
+
+    if ((!resultado.estabilidad_detalle || typeof resultado.estabilidad_detalle !== 'object')
+        && frameAterrizaje !== null) {
+        const fin = Math.min(frames.length, frameAterrizaje + Math.max(6, Math.floor(fps * 0.8)));
+        const caderasY = [];
+        for (let i = frameAterrizaje; i < fin; i += 1) {
+            const yL = normalizarNumeroOpcional(frames[i]?.landmarks?.[23]?.y);
+            const yR = normalizarNumeroOpcional(frames[i]?.landmarks?.[24]?.y);
+            if (yL === null && yR === null) {
+                continue;
+            }
+            caderasY.push((yL ?? yR));
+        }
+        if (caderasY.length >= 3) {
+            const media = caderasY.reduce((a, b) => a + b, 0) / caderasY.length;
+            const varianza = caderasY.reduce((a, b) => a + ((b - media) ** 2), 0) / caderasY.length;
+            const std = Math.sqrt(varianza);
+            const escalaPx = video?.videoHeight || 1080;
+            const oscilacionPx = std * escalaPx;
+
+            let idxEst = null;
+            for (let i = 1; i < caderasY.length - 1; i += 1) {
+                const d1 = Math.abs(caderasY[i] - caderasY[i - 1]);
+                const d2 = Math.abs(caderasY[i + 1] - caderasY[i]);
+                if (d1 < 0.0015 && d2 < 0.0015) {
+                    idxEst = i;
+                    break;
+                }
+            }
+
+            const tEst = idxEst === null ? ((fin - frameAterrizaje) / fps) : (idxEst / fps);
+            resultado.estabilidad_detalle = {
+                oscilacion_px: Number(oscilacionPx.toFixed(2)),
+                tiempo_estabilizacion_s: Number(tEst.toFixed(3)),
+                estable: idxEst !== null
+            };
+        }
+    }
+
+    if ((!resultado.amortiguacion || typeof resultado.amortiguacion !== 'object')
+        && frameAterrizaje !== null && rodVal.length > 0) {
+        const fin = Math.min(rodilla.length, frameAterrizaje + Math.max(6, Math.floor(fps * 0.8)));
+        let angAterr = null;
+        for (let i = frameAterrizaje; i < fin; i += 1) {
+            if (rodilla[i] !== null) {
+                angAterr = rodilla[i];
+                break;
+            }
+        }
+        if (angAterr !== null) {
+            const tramo = rodilla.slice(frameAterrizaje, fin).filter((v) => v !== null);
+            if (tramo.length > 0) {
+                const flexMin = Math.min(...tramo);
+                const rango = angAterr - flexMin;
+                resultado.amortiguacion = {
+                    angulo_rodilla_aterrizaje_deg: Number(angAterr.toFixed(2)),
+                    flexion_maxima_deg: Number(flexMin.toFixed(2)),
+                    rango_amortiguacion_deg: Number(rango.toFixed(2)),
+                    alerta_rigidez: rango < 20
+                };
+            }
+        }
+    }
+
+    if (normalizarNumeroOpcional(resultado.asimetria_recepcion_pct) === null && frameAterrizaje !== null) {
+        const lm = frames[frameAterrizaje]?.landmarks;
+        const yl = normalizarNumeroOpcional(lm?.[29]?.y ?? lm?.[27]?.y);
+        const yr = normalizarNumeroOpcional(lm?.[30]?.y ?? lm?.[28]?.y);
+        if (yl !== null && yr !== null) {
+            const maximo = Math.max(Math.abs(yl), Math.abs(yr), 1e-6);
+            resultado.asimetria_recepcion_pct = Number((((Math.abs(yl - yr)) / maximo) * 100).toFixed(1));
+        }
+    }
 }
 
 function escapeHtml(text) {
@@ -1076,6 +1509,8 @@ function mostrarComparativa(alias, tipoSalto, medidas) {
         observacionesPanel.style.display = 'none';
     }
 
+    _ocultarPanelLandmarks();
+
     const p1 = document.createElement('p');
     const spanAlias = document.createElement('span');
     spanAlias.className = 'comparativa-alias';
@@ -1160,6 +1595,8 @@ function renderLoop() {
             const drawingUtils = new DrawingUtils(canvasCtx);
             const puntosCuerpo = resultados.landmarks[0];
 
+            registrarLandmarksLocales(puntosCuerpo);
+
             drawingUtils.drawConnectors(puntosCuerpo, PoseLandmarker.POSE_CONNECTIONS, {
                 color: '#00FF00',
                 lineWidth: 3
@@ -1174,6 +1611,32 @@ function renderLoop() {
 
     if (analisisActivo) {
         window.requestAnimationFrame(renderLoop);
+    }
+}
+
+// Guarda landmarks frame a frame durante deteccion en vivo.
+// Este registro permite mostrar el panel 2D/3D aunque falle la ruta remota.
+function registrarLandmarksLocales(landmarks) {
+    if (!Array.isArray(landmarks) || landmarks.length === 0) {
+        return;
+    }
+
+    const serializados = landmarks.map((p) => ({
+        x: normalizarNumeroOpcional(p?.x),
+        y: normalizarNumeroOpcional(p?.y),
+        z: normalizarNumeroOpcional(p?.z),
+        visibility: normalizarNumeroOpcional(p?.visibility)
+    }));
+
+    landmarksFramesLocalBuffer.push({
+        frame_idx: landmarksFrameSeq,
+        timestamp_s: normalizarNumeroOpcional(video?.currentTime) ?? 0,
+        landmarks: serializados
+    });
+    landmarksFrameSeq += 1;
+
+    if (landmarksFramesLocalBuffer.length > MAX_LANDMARKS_LOCAL_FRAMES) {
+        landmarksFramesLocalBuffer.shift();
     }
 }
 
@@ -1323,10 +1786,15 @@ async function guardarResultadoEnBackend(datosLocales, guardarVideo, videoBlob) 
             throw new Error(payloadLocal.error || `Error HTTP: ${respuestaLocal.status}`);
         }
 
+        const insights = construirInsightsLocales(datosLocales);
+
         return {
             ...datosLocales,
             id_salto: payloadLocal.id_salto,
-            datos_parciales: true
+            datos_parciales: true,
+            alertas: insights.alertas,
+            observaciones: insights.observaciones,
+            clasificacion: insights.clasificacion
         };
     }
 
@@ -1338,6 +1806,8 @@ async function guardarResultadoEnBackend(datosLocales, guardarVideo, videoBlob) 
         formData.append('id_usuario', String(usuario.idUsuario));
         formData.append('metodo_origen', 'ia_vivo');
         formData.append('guardar_video_bd', guardarVideo ? 'true' : 'false');
+        // Solicita landmarks inline para render inmediato sin llamada extra.
+        formData.append('incluir_landmarks', 'true');
 
         const respuesta = await fetch(`${getBackendBaseUrl()}/api/salto/calcular`, {
             method: 'POST',
@@ -1349,36 +1819,15 @@ async function guardarResultadoEnBackend(datosLocales, guardarVideo, videoBlob) 
             throw new Error(payload.error || `Error HTTP: ${respuesta.status}`);
         }
 
-        const potenciaPayload = normalizarNumeroOpcional(payload.potencia_w);
-        const asimetriaPayload = normalizarNumeroOpcional(payload.asimetria_pct);
-        const estabilidadPayload = normalizarNumeroOpcional(payload.estabilidad_aterrizaje);
-        const potenciaLocal = normalizarNumeroOpcional(datosLocales.potencia_w);
-        const asimetriaLocal = normalizarNumeroOpcional(datosLocales.asimetria_pct);
-        const estabilidadLocal = normalizarNumeroOpcional(datosLocales.estabilidad_aterrizaje);
-
         const distanciaBackend = Number(payload.distancia || 0);
         if (distanciaBackend <= 0 && Number(datosLocales.distancia || 0) > 0) {
-            mostrarToast('El backend devolvió 0 cm; se aplica la distancia local calibrada.', 'warn', 3200);
-            const fallbackLocal = await guardarLocalEnSaltos();
-            return {
-                ...payload,
-                ...fallbackLocal,
-                potencia_w: potenciaPayload ?? potenciaLocal,
-                asimetria_pct: asimetriaPayload ?? asimetriaLocal,
-                estabilidad_aterrizaje: estabilidadPayload ?? estabilidadLocal,
-                angulo_rodilla_deg: normalizarNumeroOpcional(payload.angulo_rodilla_deg) ?? datosLocales.angulo_rodilla_deg ?? null,
-                angulo_cadera_deg: normalizarNumeroOpcional(payload.angulo_cadera_deg) ?? datosLocales.angulo_cadera_deg ?? null,
-            };
+            // Si backend devuelve 0 cm, mantenemos analisis avanzado y
+            // aplicamos distancia local calibrada para no romper UX.
+            mostrarToast('El backend devolvio 0 cm; se mantiene analisis avanzado y se muestra distancia local calibrada.', 'warn', 3200);
+            return combinarResultadoConFallback(payload, datosLocales);
         }
 
-        return {
-            ...payload,
-            potencia_w: potenciaPayload ?? potenciaLocal,
-            asimetria_pct: asimetriaPayload ?? asimetriaLocal,
-            estabilidad_aterrizaje: estabilidadPayload ?? estabilidadLocal,
-            angulo_rodilla_deg: normalizarNumeroOpcional(payload.angulo_rodilla_deg) ?? datosLocales.angulo_rodilla_deg ?? null,
-            angulo_cadera_deg: normalizarNumeroOpcional(payload.angulo_cadera_deg) ?? datosLocales.angulo_cadera_deg ?? null,
-        };
+        return combinarResultadoConFallback(payload, datosLocales);
     }
 
     if (guardarVideo && !videoBlob) {
@@ -1427,7 +1876,8 @@ async function finalizarSaltoEnVivo(tiempoVuelo, startX, endX, ySuelo, yPico) {
         angulo_cadera_deg: normalizarNumeroOpcional(angulosDespegueActual.angulo_cadera_deg),
         potencia_w: calcularPotenciaLocal(textoTipo, distanciaFinalCm, tiempoVuelo),
         asimetria_pct: normalizarNumeroOpcional(asimetriaDespegueActual),
-        estabilidad_aterrizaje: calcularEstabilidadLocal(asimetriaDespegueActual, 0.95)
+        estabilidad_aterrizaje: calcularEstabilidadLocal(asimetriaDespegueActual, 0.95),
+        landmarks_frames: landmarksFramesLocalBuffer.slice()
     };
 
     const guardarVideo = getPreferenciaGuardarVideoTiempoReal() === 'si';
@@ -1446,21 +1896,24 @@ async function finalizarSaltoEnVivo(tiempoVuelo, startX, endX, ySuelo, yPico) {
 }
 
 function procesarResultadoSegunModo(datos) {
+    // Normalizacion unica para todos los modos (individual/comparativa)
+    // y para todos los origenes (tiempo real/galeria).
+    const datosNormalizados = normalizarResultadoParaUI(datos);
     const modo = getModoAnalisis();
     if (modo !== 'comparativa') {
-        animarResultados(datos);
+        animarResultados(datosNormalizados);
         cargarAnaliticaUsuario({ lanzarToastFatiga: true }).catch(() => {
             // La UI principal ya mostró el resultado del salto.
         });
         return;
     }
 
-    medidasComparativa.push(Number(datos.distancia || 0));
+    medidasComparativa.push(Number(datosNormalizados.distancia || 0));
 
     if (medidasComparativa.length < SALTOS_OBJETIVO_COMPARATIVA) {
         actualizarBadgeComparativa();
         mostrarToast(
-            `Salto ${medidasComparativa.length}/${SALTOS_OBJETIVO_COMPARATIVA} registrado: ${Number(datos.distancia || 0).toFixed(2)} cm`,
+            `Salto ${medidasComparativa.length}/${SALTOS_OBJETIVO_COMPARATIVA} registrado: ${Number(datosNormalizados.distancia || 0).toFixed(2)} cm`,
             'success',
             2200
         );
@@ -1471,7 +1924,7 @@ function procesarResultadoSegunModo(datos) {
     }
 
     const alias = sessionStorage.getItem('aliasUser') || 'Usuario';
-    const tipo = (datos.tipo_salto || document.getElementById('tipo-salto')?.value || 'vertical').toString().toLowerCase();
+    const tipo = (datosNormalizados.tipo_salto || document.getElementById('tipo-salto')?.value || 'vertical').toString().toLowerCase();
     mostrarComparativa(alias, tipo, medidasComparativa);
     resetComparativa();
     cargarAnaliticaUsuario({ lanzarToastFatiga: true }).catch(() => {
@@ -1506,6 +1959,8 @@ document.addEventListener('iniciarDeteccion', () => {
     };
     asimetriaDespegueActual = null;
     finalizandoSalto = false;
+    landmarksFramesLocalBuffer = [];
+    landmarksFrameSeq = 0;
 
     actualizarBadgeComparativa();
 
@@ -1545,6 +2000,8 @@ document.addEventListener('videoListo', async (evento) => {
         formData.append('id_usuario', idUsuario);
         formData.append('metodo_origen', 'video_galeria');
     }
+    // Mantiene el mismo contrato de salida que tiempo real para visor landmarks.
+    formData.append('incluir_landmarks', 'true');
 
     try {
         const respuesta = await fetch(`${getBackendBaseUrl()}/api/salto/calcular`, {
@@ -1577,16 +2034,21 @@ function animarResultados(datos) {
         gridTecnico.style.display = 'grid';
     }
 
-    document.getElementById('distancia-resultado').textContent = `${datos.distancia} ${datos.unidad || 'cm'}`;
+    const distancia = normalizarNumeroOpcional(datos.distancia);
+    document.getElementById('distancia-resultado').textContent = `${(distancia ?? 0).toFixed(2)} ${datos.unidad || 'cm'}`;
     document.getElementById('tipo-resultado').textContent = `Salto ${normalizarTextoTipo(datos.tipo_salto)}`;
 
-    const porcentaje = Math.round((datos.confianza || 0) * 100);
+    const confianza = normalizarNumeroOpcional(datos.confianza) ?? 0;
+    const porcentaje = Math.round(confianza * 100);
+    const tiempoVuelo = normalizarNumeroOpcional(datos.tiempo_vuelo_s);
+    const frameDespegue = (datos.frame_despegue ?? '--');
+    const frameAterrizaje = (datos.frame_aterrizaje ?? '--');
     const anguloRodilla = Number(datos.angulo_rodilla_deg);
     const anguloCadera = Number(datos.angulo_cadera_deg);
     document.getElementById('data-confianza').textContent = `${porcentaje}%`;
-    document.getElementById('data-tiempo').textContent = datos.tiempo_vuelo_s ? `${datos.tiempo_vuelo_s}s` : '--';
-    document.getElementById('data-despegue').textContent = datos.frame_despegue || '--';
-    document.getElementById('data-aterrizaje').textContent = datos.frame_aterrizaje || '--';
+    document.getElementById('data-tiempo').textContent = (tiempoVuelo !== null) ? `${tiempoVuelo.toFixed(3)} s` : '--';
+    document.getElementById('data-despegue').textContent = String(frameDespegue);
+    document.getElementById('data-aterrizaje').textContent = String(frameAterrizaje);
     document.getElementById('data-angulo-rodilla').textContent = Number.isFinite(anguloRodilla) ? `${anguloRodilla.toFixed(2)} deg` : '--';
     document.getElementById('data-angulo-cadera').textContent = Number.isFinite(anguloCadera) ? `${anguloCadera.toFixed(2)} deg` : '--';
 
@@ -1601,6 +2063,18 @@ function animarResultados(datos) {
     } else {
         elAsimetria.textContent = '--';
         elAsimetria.style.color = '';
+    }
+
+    const estabilidad = normalizarNumeroOpcional(datos.estabilidad_aterrizaje);
+    const elEstabilidad = document.getElementById('data-estabilidad');
+    if (elEstabilidad) {
+        if (estabilidad !== null) {
+            elEstabilidad.textContent = `${estabilidad.toFixed(1)} / 100`;
+            elEstabilidad.style.color = estabilidad < 60 ? '#ff6b6b' : '';
+        } else {
+            elEstabilidad.textContent = '--';
+            elEstabilidad.style.color = '';
+        }
     }
 
     // Fase 6 — Panel de aterrizaje
@@ -1621,6 +2095,11 @@ function animarResultados(datos) {
     // Fase 9 — Interpretación automática (alertas, observaciones, clasificación)
     renderInsightsSalto(datos);
 
+    // Fase 10 — Visualización frame a frame de landmarks 33 puntos
+    renderPanelLandmarksResultado(datos).catch((error) => {
+        console.warn('No se pudo renderizar el panel de landmarks:', error);
+    });
+
     panelResultados.classList.add('show');
 }
 
@@ -1632,7 +2111,9 @@ function renderPanelAterrizaje(datos) {
         return;
     }
 
-    const estab = datos.estabilidad_aterrizaje;
+    const estab = (datos.estabilidad_detalle && typeof datos.estabilidad_detalle === 'object')
+        ? datos.estabilidad_detalle
+        : ((datos.estabilidad_aterrizaje && typeof datos.estabilidad_aterrizaje === 'object') ? datos.estabilidad_aterrizaje : null);
     const amort = datos.amortiguacion;
     const asimRecep = normalizarNumeroOpcional(datos.asimetria_recepcion_pct);
 
@@ -1883,6 +2364,551 @@ function crearFondoFases(indices, fases) {
     return null;
 }
 
+// ── Fase 10 — Viewer de landmarks frame a frame (2D + 3D) ──
+
+function _landmarksUI() {
+    return {
+        panel: document.getElementById('panel-landmarks'),
+        estado: document.getElementById('landmarks-estado'),
+        controls: document.getElementById('landmarks-controls'),
+        slider: document.getElementById('landmarks-slider'),
+        frameEtiqueta: document.getElementById('landmarks-frame-etiqueta'),
+        tiempoEtiqueta: document.getElementById('landmarks-tiempo-etiqueta'),
+        canvas2d: document.getElementById('landmarks-canvas-2d'),
+        view3d: document.getElementById('landmarks-view-3d'),
+        btn2d: document.getElementById('btn-landmarks-2d'),
+        btn3d: document.getElementById('btn-landmarks-3d')
+    };
+}
+
+function _setLandmarksEstado(texto) {
+    const { estado } = _landmarksUI();
+    if (estado) {
+        estado.textContent = texto;
+    }
+}
+
+function _normalizarLandmark(p) {
+    if (!p || typeof p !== 'object') {
+        return null;
+    }
+    const x = Number(p.x);
+    const y = Number(p.y);
+    const z = Number(p.z);
+    const visibility = p.visibility == null ? null : Number(p.visibility);
+    if (!Number.isFinite(x) || !Number.isFinite(y) || !Number.isFinite(z)) {
+        return null;
+    }
+    return {
+        x,
+        y,
+        z,
+        visibility: Number.isFinite(visibility) ? visibility : null
+    };
+}
+
+function _normalizarFramesLandmarks(frames) {
+    if (!Array.isArray(frames)) {
+        return [];
+    }
+    const salida = frames.map((f, idx) => ({
+        frame_idx: Number.isFinite(Number(f?.frame_idx)) ? Number(f.frame_idx) : idx,
+        timestamp_s: Number.isFinite(Number(f?.timestamp_s)) ? Number(f.timestamp_s) : 0,
+        landmarks: Array.isArray(f?.landmarks) ? f.landmarks.map(_normalizarLandmark) : []
+    }));
+
+    // Normaliza timestamps a tiempo relativo del primer frame
+    // para evitar valores absolutos grandes en la UI.
+    const t0 = salida.length > 0 ? salida[0].timestamp_s : 0;
+    return salida.map((f) => ({
+        ...f,
+        timestamp_s: Math.max(0, f.timestamp_s - t0)
+    }));
+}
+
+function _dibujarFrame2D(frame) {
+    const { canvas2d } = _landmarksUI();
+    if (!canvas2d) {
+        return;
+    }
+
+    const ctx = canvas2d.getContext('2d');
+    const w = canvas2d.width;
+    const h = canvas2d.height;
+    ctx.clearRect(0, 0, w, h);
+
+    ctx.fillStyle = '#130f1b';
+    ctx.fillRect(0, 0, w, h);
+
+    const lms = Array.isArray(frame?.landmarks) ? frame.landmarks : [];
+    if (lms.length === 0) {
+        ctx.fillStyle = '#d8c6ea';
+        ctx.font = '14px Segoe UI';
+        ctx.fillText('Sin landmarks para este frame', 16, 24);
+        return;
+    }
+
+    ctx.lineWidth = 2;
+    ctx.strokeStyle = 'rgba(89, 255, 199, 0.82)';
+    POSE_CONNECTIONS_33.forEach(([a, b]) => {
+        const pa = lms[a];
+        const pb = lms[b];
+        if (!pa || !pb) {
+            return;
+        }
+        if (!Number.isFinite(pa.x) || !Number.isFinite(pa.y) || !Number.isFinite(pb.x) || !Number.isFinite(pb.y)) {
+            return;
+        }
+        ctx.beginPath();
+        ctx.moveTo(pa.x * w, pa.y * h);
+        ctx.lineTo(pb.x * w, pb.y * h);
+        ctx.stroke();
+    });
+
+    lms.forEach((p) => {
+        if (!p || !Number.isFinite(p.x) || !Number.isFinite(p.y)) {
+            return;
+        }
+        const vis = p.visibility == null ? 1 : Math.max(0, Math.min(1, p.visibility));
+        ctx.beginPath();
+        ctx.arc(p.x * w, p.y * h, 3.2, 0, Math.PI * 2);
+        ctx.fillStyle = `rgba(255, 160, 110, ${0.3 + (0.7 * vis)})`;
+        ctx.fill();
+    });
+}
+
+async function _cargarThreeDeps() {
+    if (!threeDepsPromise) {
+        threeDepsPromise = (async () => {
+            // Carga escalonada de CDNs para mejorar compatibilidad ESM
+            // en navegadores donde OrbitControls no resuelve "three" igual.
+            const intentos = [
+                {
+                    threeUrl: 'https://esm.sh/three@0.160.0?bundle',
+                    controlsUrl: 'https://esm.sh/three@0.160.0/examples/jsm/controls/OrbitControls.js?deps=three@0.160.0'
+                },
+                {
+                    threeUrl: 'https://unpkg.com/three@0.160.0/build/three.module.js',
+                    controlsUrl: 'https://unpkg.com/three@0.160.0/examples/jsm/controls/OrbitControls.js?module'
+                },
+                {
+                    threeUrl: 'https://cdn.jsdelivr.net/npm/three@0.160.0/+esm',
+                    controlsUrl: 'https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/controls/OrbitControls.js/+esm'
+                }
+            ];
+
+            let ultimoError = null;
+            for (const intento of intentos) {
+                try {
+                    const [threeMod, controlsMod] = await Promise.all([
+                        import(intento.threeUrl),
+                        import(intento.controlsUrl)
+                    ]);
+                    return {
+                        THREE: threeMod,
+                        OrbitControls: controlsMod.OrbitControls
+                    };
+                } catch (error) {
+                    ultimoError = error;
+                }
+            }
+
+            throw new Error(ultimoError?.message || 'No se pudieron cargar las dependencias 3D.');
+        })();
+    }
+    return threeDepsPromise;
+}
+
+function _disposeThreeViewer() {
+    // Limpieza completa de recursos WebGL/eventos para evitar fugas
+    // al cambiar modo, recargar datos o reintentar visualizacion.
+    const inst = landmarksViewerState.three;
+    if (!inst) {
+        return;
+    }
+    if (inst.rafId) {
+        cancelAnimationFrame(inst.rafId);
+    }
+    if (inst.resizeObserver) {
+        inst.resizeObserver.disconnect();
+    }
+    if (inst.onWindowResize) {
+        window.removeEventListener('resize', inst.onWindowResize);
+    }
+    if (inst.controls && typeof inst.controls.dispose === 'function') {
+        inst.controls.dispose();
+    }
+    if (inst.renderer) {
+        inst.renderer.dispose();
+        const el = inst.renderer.domElement;
+        if (el && el.parentNode) {
+            el.parentNode.removeChild(el);
+        }
+    }
+    landmarksViewerState.three = null;
+}
+
+async function _ensureThreeViewer() {
+    // Inicializa una unica escena 3D reutilizable para el panel actual.
+    const { view3d } = _landmarksUI();
+    if (!view3d) {
+        return null;
+    }
+    if (landmarksViewerState.three?.container === view3d) {
+        return landmarksViewerState.three;
+    }
+
+    _disposeThreeViewer();
+    const { THREE, OrbitControls } = await _cargarThreeDeps();
+
+    const scene = new THREE.Scene();
+    const camera = new THREE.PerspectiveCamera(45, 1, 0.01, 20);
+    camera.position.set(0, 0.1, 2.4);
+
+    let renderer;
+    try {
+        renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+    } catch (error) {
+        throw new Error('WebGL no disponible en este dispositivo/navegador.');
+    }
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+
+    const controls = new OrbitControls(camera, renderer.domElement);
+    controls.enableDamping = true;
+    controls.target.set(0, 0, 0);
+
+    scene.add(new THREE.AmbientLight(0xffffff, 0.85));
+    const key = new THREE.DirectionalLight(0xffffff, 0.8);
+    key.position.set(1.8, 2.5, 2.1);
+    scene.add(key);
+
+    const jointMat = new THREE.MeshStandardMaterial({ color: 0xff9f6e, roughness: 0.5 });
+    const joints = Array.from({ length: 33 }, () => {
+        const mesh = new THREE.Mesh(new THREE.SphereGeometry(0.025, 10, 10), jointMat.clone());
+        mesh.visible = false;
+        scene.add(mesh);
+        return mesh;
+    });
+
+    const bones = POSE_CONNECTIONS_33.map(([a, b]) => {
+        const geometry = new THREE.BufferGeometry();
+        const positions = new Float32Array(6);
+        geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+        const line = new THREE.Line(geometry, new THREE.LineBasicMaterial({ color: 0x59ffc7 }));
+        line.visible = false;
+        scene.add(line);
+        return { a, b, line, positions };
+    });
+
+    function resize() {
+        const w = Math.max(1, view3d.clientWidth);
+        const h = Math.max(1, view3d.clientHeight);
+        renderer.setSize(w, h, false);
+        camera.aspect = w / h;
+        camera.updateProjectionMatrix();
+    }
+
+    let resizeObserver = null;
+    let onWindowResize = null;
+    if (typeof ResizeObserver !== 'undefined') {
+        resizeObserver = new ResizeObserver(() => resize());
+        resizeObserver.observe(view3d);
+    } else {
+        onWindowResize = () => resize();
+        window.addEventListener('resize', onWindowResize);
+    }
+
+    view3d.textContent = '';
+    view3d.appendChild(renderer.domElement);
+    resize();
+
+    const inst = {
+        container: view3d,
+        THREE,
+        scene,
+        camera,
+        renderer,
+        controls,
+        joints,
+        bones,
+        resizeObserver,
+        onWindowResize,
+        rafId: 0
+    };
+
+    const tick = () => {
+        inst.controls.update();
+        inst.renderer.render(inst.scene, inst.camera);
+        inst.rafId = requestAnimationFrame(tick);
+    };
+    tick();
+
+    landmarksViewerState.three = inst;
+    return inst;
+}
+
+function _renderFrame3D(frame) {
+    const inst = landmarksViewerState.three;
+    if (!inst) {
+        return;
+    }
+    const lms = Array.isArray(frame?.landmarks) ? frame.landmarks : [];
+
+    const points = lms.map((p) => {
+        if (!p || !Number.isFinite(p.x) || !Number.isFinite(p.y) || !Number.isFinite(p.z)) {
+            return null;
+        }
+        return {
+            x: (p.x - 0.5) * 2,
+            y: (0.5 - p.y) * 2,
+            z: -(p.z || 0) * 2
+        };
+    });
+
+    inst.joints.forEach((mesh, idx) => {
+        const p = points[idx];
+        mesh.visible = Boolean(p);
+        if (p) {
+            mesh.position.set(p.x, p.y, p.z);
+        }
+    });
+
+    inst.bones.forEach((b) => {
+        const pa = points[b.a];
+        const pb = points[b.b];
+        if (!pa || !pb) {
+            b.line.visible = false;
+            return;
+        }
+        b.positions[0] = pa.x;
+        b.positions[1] = pa.y;
+        b.positions[2] = pa.z;
+        b.positions[3] = pb.x;
+        b.positions[4] = pb.y;
+        b.positions[5] = pb.z;
+        b.line.geometry.attributes.position.needsUpdate = true;
+        b.line.visible = true;
+    });
+}
+
+function _actualizarFrameLandmarks(frameIndex) {
+    const { slider, frameEtiqueta, tiempoEtiqueta } = _landmarksUI();
+    const total = landmarksViewerState.frames.length;
+    if (!total) {
+        return;
+    }
+
+    const idx = Math.max(0, Math.min(total - 1, Number(frameIndex) || 0));
+    landmarksViewerState.currentFrame = idx;
+    if (slider) {
+        slider.value = String(idx);
+    }
+
+    const frame = landmarksViewerState.frames[idx];
+    if (frameEtiqueta) {
+        frameEtiqueta.textContent = `Frame ${idx + 1} / ${total}`;
+    }
+    if (tiempoEtiqueta) {
+        tiempoEtiqueta.textContent = `${Number(frame?.timestamp_s || 0).toFixed(3)} s`;
+    }
+
+    _dibujarFrame2D(frame);
+    _renderFrame3D(frame);
+}
+
+async function _cambiarModoLandmarks(mode) {
+    const { canvas2d, view3d, btn2d, btn3d } = _landmarksUI();
+    landmarksViewerState.mode = mode === '3d' ? '3d' : '2d';
+
+    if (btn2d) {
+        btn2d.classList.toggle('active', landmarksViewerState.mode === '2d');
+    }
+    if (btn3d) {
+        btn3d.classList.toggle('active', landmarksViewerState.mode === '3d');
+    }
+    if (canvas2d) {
+        canvas2d.style.display = landmarksViewerState.mode === '2d' ? 'block' : 'none';
+    }
+    if (view3d) {
+        view3d.style.display = landmarksViewerState.mode === '3d' ? 'block' : 'none';
+    }
+
+    if (landmarksViewerState.mode === '3d') {
+        await _ensureThreeViewer();
+    }
+    _actualizarFrameLandmarks(landmarksViewerState.currentFrame);
+}
+
+function _bindLandmarksControls() {
+    const { slider, btn2d, btn3d } = _landmarksUI();
+    if (slider && !slider.dataset.bound) {
+        slider.addEventListener('input', (ev) => {
+            _actualizarFrameLandmarks(Number(ev.target.value));
+        });
+        slider.dataset.bound = '1';
+    }
+    if (btn2d && !btn2d.dataset.bound) {
+        btn2d.addEventListener('click', () => {
+            _cambiarModoLandmarks('2d').catch(() => {
+                _setLandmarksEstado('No se pudo activar la vista 2D.');
+            });
+        });
+        btn2d.dataset.bound = '1';
+    }
+    if (btn3d && !btn3d.dataset.bound) {
+        btn3d.addEventListener('click', () => {
+            _cambiarModoLandmarks('3d').catch((error) => {
+                _setLandmarksEstado(`No se pudo activar la vista 3D: ${error.message}. Se mantiene la vista 2D.`);
+                _cambiarModoLandmarks('2d').catch(() => {
+                    // Mantener estado actual si también falla el fallback.
+                });
+            });
+        });
+        btn3d.dataset.bound = '1';
+    }
+}
+
+function _ocultarPanelLandmarks() {
+    const { panel } = _landmarksUI();
+    if (panel) {
+        panel.style.display = 'none';
+    }
+    landmarksViewerState.idSalto = null;
+    landmarksViewerState.frames = [];
+    landmarksViewerState.currentFrame = 0;
+    _disposeThreeViewer();
+}
+
+async function renderPanelLandmarksPorSalto(idSalto) {
+    const ui = _landmarksUI();
+    if (!ui.panel || !idSalto) {
+        _ocultarPanelLandmarks();
+        return;
+    }
+
+    ui.panel.style.display = 'block';
+    if (ui.controls) {
+        ui.controls.style.display = 'none';
+    }
+    if (ui.canvas2d) {
+        ui.canvas2d.style.display = 'none';
+    }
+    if (ui.view3d) {
+        ui.view3d.style.display = 'none';
+    }
+    _setLandmarksEstado('Cargando landmarks frame a frame...');
+
+    _bindLandmarksControls();
+
+    let frames = landmarksCache.get(idSalto);
+    if (!frames) {
+        const resp = await fetch(`${getBackendBaseUrl()}/api/salto/${idSalto}/landmarks`);
+        const payload = await resp.json().catch(() => ({}));
+        if (!resp.ok) {
+            throw new Error(payload.error || `HTTP ${resp.status}`);
+        }
+        frames = _normalizarFramesLandmarks(payload.frames || []);
+        landmarksCache.set(idSalto, frames);
+    }
+
+    if (!Array.isArray(frames) || frames.length === 0) {
+        _setLandmarksEstado('Este salto no tiene landmarks completos guardados.');
+        return;
+    }
+
+    landmarksViewerState.idSalto = idSalto;
+    landmarksViewerState.frames = frames;
+    landmarksViewerState.currentFrame = 0;
+
+    if (ui.slider) {
+        ui.slider.min = '0';
+        ui.slider.max = String(frames.length - 1);
+        ui.slider.value = '0';
+    }
+    if (ui.controls) {
+        ui.controls.style.display = 'grid';
+    }
+
+    _setLandmarksEstado('Desliza para inspeccionar la postura frame a frame.');
+    await _cambiarModoLandmarks(landmarksViewerState.mode || '2d');
+}
+
+async function renderPanelLandmarksResultado(datos) {
+    // Prioridad de datos:
+    // 1) landmarks inline del resultado actual,
+    // 2) endpoint por id_salto,
+    // 3) ocultar panel si no hay datos.
+    const framesInline = _normalizarFramesLandmarks(datos?.landmarks_frames || []);
+
+    if (Boolean(datos?.datos_parciales) && framesInline.length === 0) {
+        _ocultarPanelLandmarks();
+        return;
+    }
+
+    if (Array.isArray(framesInline) && framesInline.length > 0) {
+        const ui = _landmarksUI();
+        if (!ui.panel) {
+            return;
+        }
+
+        ui.panel.style.display = 'block';
+        if (ui.controls) {
+            ui.controls.style.display = 'grid';
+        }
+
+        const idSaltoInline = Number(datos?.id_salto);
+        if (Number.isFinite(idSaltoInline) && idSaltoInline > 0) {
+            landmarksCache.set(idSaltoInline, framesInline);
+            landmarksViewerState.idSalto = idSaltoInline;
+        } else {
+            landmarksViewerState.idSalto = null;
+        }
+
+        landmarksViewerState.frames = framesInline;
+        landmarksViewerState.currentFrame = 0;
+
+        if (ui.slider) {
+            ui.slider.min = '0';
+            ui.slider.max = String(framesInline.length - 1);
+            ui.slider.value = '0';
+        }
+
+        _bindLandmarksControls();
+        _setLandmarksEstado('Landmarks cargados desde el analisis actual.');
+        await _cambiarModoLandmarks(landmarksViewerState.mode || '2d');
+        return;
+    }
+
+    const idSalto = Number(datos?.id_salto);
+    if (!Number.isFinite(idSalto) || idSalto <= 0) {
+        _ocultarPanelLandmarks();
+        return;
+    }
+    try {
+        await renderPanelLandmarksPorSalto(idSalto);
+    } catch (error) {
+        const { panel, controls, canvas2d, view3d } = _landmarksUI();
+        if (panel) {
+            panel.style.display = 'block';
+        }
+        if (controls) {
+            controls.style.display = 'none';
+        }
+        if (canvas2d) {
+            canvas2d.style.display = 'none';
+        }
+        if (view3d) {
+            view3d.style.display = 'none';
+        }
+        const msg = String(error?.message || 'error desconocido');
+        if (msg.includes('404')) {
+            _setLandmarksEstado('Este salto no tiene landmarks completos guardados.');
+        } else {
+            _setLandmarksEstado(`No se pudieron cargar landmarks: ${msg}`);
+        }
+    }
+}
+
 // ── Fase 8.2 — Comparar dos intentos superpuestos ──
 
 async function poblarSelectorComparacion(datos) {
@@ -2034,7 +3060,7 @@ function configurarBotonVideoAnotado(datos) {
     }
 
     // Solo mostrar si el salto tiene datos válidos y vino de archivo
-    if (!datos.frame_despegue || !ultimoArchivoSubido) {
+    if (datos.frame_despegue == null || !ultimoArchivoSubido) {
         panel.style.display = 'none';
         return;
     }
@@ -2099,7 +3125,7 @@ document.getElementById('btn-reintentar').addEventListener('click', () => {
     ultimoArchivoSubido = null;
 
     // Limpiar paneles de análisis avanzado
-    ['panel-aterrizaje', 'panel-resumen-gesto', 'panel-timeline', 'panel-graficas', 'panel-video-anotado'].forEach((id) => {
+    ['panel-aterrizaje', 'panel-resumen-gesto', 'panel-timeline', 'panel-graficas', 'panel-video-anotado', 'panel-landmarks'].forEach((id) => {
         const el = document.getElementById(id);
         if (el) {
             el.style.display = 'none';
@@ -2113,6 +3139,7 @@ document.getElementById('btn-reintentar').addEventListener('click', () => {
         graficaCadera.destroy();
         graficaCadera = null;
     }
+    _disposeThreeViewer();
 });
 
 document.getElementById('modo-analisis')?.addEventListener('change', () => {

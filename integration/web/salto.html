@@ -345,6 +345,29 @@
                 </div>
             </div>
 
+            <div id="panel-landmarks" class="analisis-panel" style="display: none;">
+                <h3 class="analisis-panel-titulo">Esqueleto por frame (33 landmarks)</h3>
+
+                <p id="landmarks-estado" class="sensor-nota" style="text-align:left;">Cargando landmarks...</p>
+
+                <div id="landmarks-controls" class="landmarks-controls" style="display:none;">
+                    <div class="landmarks-frame-head">
+                        <span id="landmarks-frame-etiqueta">Frame 0 / 0</span>
+                        <span id="landmarks-tiempo-etiqueta">0.000 s</span>
+                    </div>
+
+                    <input type="range" id="landmarks-slider" min="0" max="0" step="1" value="0">
+
+                    <div class="landmarks-switch">
+                        <button id="btn-landmarks-2d" class="sensor-btn secondary-btn landmarks-switch-btn active" type="button">Vista 2D</button>
+                        <button id="btn-landmarks-3d" class="sensor-btn secondary-btn landmarks-switch-btn" type="button">Vista 3D</button>
+                    </div>
+                </div>
+
+                <canvas id="landmarks-canvas-2d" class="landmarks-canvas" width="640" height="360"></canvas>
+                <div id="landmarks-view-3d" class="landmarks-view-3d" style="display:none;"></div>
+            </div>
+
             <!-- Fase 8.3 — Descarga de vídeo anotado -->
             <div id="panel-video-anotado" class="analisis-panel" style="display: none;">
                 <button id="btn-video-anotado" class="sensor-btn secondary-btn">Descargar vídeo anotado</button>
