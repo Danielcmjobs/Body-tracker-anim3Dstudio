@@ -30,8 +30,8 @@ El Arduino puede enviar `"Distancia: 23.45 cm"` o simplemente `"23.45"`.
 ## Estructura modular (`modules/<nombre>/`)
 
 Cada funcionalidad (sensor, salto, futuros) vive en su propia carpeta dentro  
-de `modules/`, con `arduino/`, `backend/` y `frontend/` propios. Cada módulo  
-puede arrancarse y probarse de forma autónoma sin depender del resto.
+de `modules/`, con su backend y recursos específicos. Cada módulo puede  
+arrancarse y probarse de forma autónoma sin depender del resto.
 
 `integration/` reúne los módulos en una única interfaz web (Fase 3).
 
@@ -69,9 +69,9 @@ Se aplican dos mejoras antes de buscar el despegue/aterrizaje:
    Esto evita que una fluctuación al inicio de la fase de ascenso se  
    confunda con un aterrizaje.
 
-Además, para **salto horizontal** el umbral se reduce a `UMBRAL × 0.3`  
-(0.9 px/frame), ya que el desplazamiento vertical es mucho menor que  
-en un salto vertical y un umbral alto no detectaría la fase de vuelo.
+Además, para **salto horizontal** se usa un umbral específico más alto  
+(`max(8.0, altura_ref × 0.02)`) para superar el ruido natural de postura  
+de MediaPipe y evitar falsos vuelos durante la caminata o preparación.
 
 ## Filtrado de reflejos con `num_poses=2` y selección por tamaño
 

@@ -1,4 +1,4 @@
-# Proyecto-Medición
+# body-tracking-anim3d
 
 Plataforma web modular para captura, procesamiento y visualización de **mediciones físicas en tiempo real**.
 
@@ -28,7 +28,7 @@ Documentación detallada en [`docs/`](docs/).
 ## Estructura del proyecto
 
 ```
-proyecto-medicion/
+body-tracking-anim3d/
 │
 ├── README.md
 ├── requirements.txt
@@ -67,7 +67,6 @@ proyecto-medicion/
 │
 ├── integration/
 │   ├── README.md
-│   ├── backend/                 # Reservado — gateway/orquestador
 │   └── web/                     ← Frontend web unificado
 │       ├── index.html           ← Landing con cards de módulos
 │       ├── salto.html           ← Grabación + análisis de salto
@@ -80,7 +79,9 @@ proyecto-medicion/
 │           └── api_sensor.js    ← Polling a API sensor
 │
 ├── scripts/
-│   └── run_all.bat              ← Arranca todo con un doble-clic
+│   ├── run_all.bat              ← Arranca todo con un doble-clic (HTTPS por defecto)
+│   ├── https_server.py          ← Servidor estático HTTPS para integration/web
+│   └── generate_cert.py         ← Genera certificado local para localhost/LAN
 │
 ├── tests/                       # Reservado
 │
@@ -99,9 +100,15 @@ proyecto-medicion/
 pip install -r requirements.txt
 ```
 
-### Arranque rápido (todo a la vez)
+### Arranque rápido (recomendado, HTTPS)
 
-Doble clic en `scripts\run_all.bat` → abre `http://localhost:8080`.
+Doble clic en `scripts\run_all.bat` y abre `https://localhost:8443`.
+
+Si no tienes certificado o cambiaste de red:
+
+```powershell
+.\.venv\Scripts\python.exe scripts\generate_cert.py
+```
 
 ### Arranque manual
 
@@ -117,13 +124,27 @@ cd modules\sensor\backend
 python app.py
 ```
 
-**Frontend web (puerto 8080):**
+**Frontend web HTTPS (puerto 8443):**
+```powershell
+cd .
+python scripts\https_server.py
+```
+
+Abrir `https://localhost:8443` en el navegador.
+
+### Modo HTTP (legacy / compatibilidad)
+
+También se puede ejecutar en HTTP para pruebas locales antiguas:
+
+**Frontend web HTTP (puerto 8080):**
 ```powershell
 cd integration\web
 python -m http.server 8080
 ```
 
 Abrir `http://localhost:8080` en el navegador.
+
+Nota importante para HTTP: los backends arrancan en HTTPS automáticamente si existen `certs/cert.pem` y `certs/key.pem`. Para trabajar todo en HTTP, arranca sin certificados locales.
 
 ### Modo consola del sensor (sin web, para test rápido)
 

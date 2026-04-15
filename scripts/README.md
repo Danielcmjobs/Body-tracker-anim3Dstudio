@@ -26,6 +26,23 @@ scripts\run_all.bat
 
 Después abrir `https://localhost:8443` en el navegador. Cerrar las ventanas de cmd para detener los servicios.
 
+## Modo HTTP (compatibilidad)
+
+Aunque el modo recomendado es HTTPS, se mantiene soporte de arranque manual del frontend en HTTP:
+
+```powershell
+cd integration\web
+python -m http.server 8080
+```
+
+Abrir:
+
+```text
+http://localhost:8080
+```
+
+Nota: los backends arrancan en HTTPS automáticamente si existen certificados en `certs/`. Para un entorno totalmente HTTP, arranca sin esos certificados.
+
 ## Acceso desde movil (LAN)
 
 1. Genera o regenera certificado con tu IP actual:

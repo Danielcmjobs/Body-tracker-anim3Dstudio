@@ -27,7 +27,7 @@ Prerequisito: Fases 1 y 2 completadas.
 - [x] Página de sensor Arduino (`arduino.html`) con lectura en tiempo real
 - [x] Script único de arranque (`scripts/run_all.bat`)
 - [x] Eliminados frontends individuales y scripts obsoletos
-- [ ] Decidir si se necesita `integration/backend/` (gateway/orquestador)
+- [x] `integration/backend/` descartado por ahora: no es necesario con la arquitectura actual de front unificado + APIs por módulo
 - [x] Base de datos MySQL — tablas `usuarios` y `saltos` (relación 1:N)
 - [x] CRUD REST para usuarios y saltos
 - [x] Persistencia automática del resultado de cálculo (si se envía `id_usuario`)
@@ -110,7 +110,8 @@ Objetivo: pasar de analizar solo el despegue a cubrir **todo el ciclo del salto*
 - [x] Detectar el rango de frames post-aterrizaje (desde `frame_aterrizaje` hasta estabilización)
 - [x] Calcular oscilación del centro de masa (varianza de Y del promedio de caderas, landmarks 23/24) en los N frames tras aterrizar
 - [x] Calcular tiempo hasta estabilización: nº de frames hasta que la derivada de Y vuelve a ~0
-- [x] Devolver `estabilidad_aterrizaje` en la respuesta JSON (objeto con `oscilacion_px`, `tiempo_estabilizacion_s`, `estable: bool`)
+- [x] Devolver `estabilidad_aterrizaje` como score numérico global (0..100)
+- [x] Devolver `estabilidad_detalle` en la respuesta JSON (objeto con `oscilacion_px`, `tiempo_estabilizacion_s`, `estable: bool`)
 - [x] Mostrar métrica de estabilidad en el panel de resultados del frontend
 
 ### 6.2 Análisis de amortiguación
@@ -118,7 +119,7 @@ Objetivo: pasar de analizar solo el despegue a cubrir **todo el ciclo del salto*
 - [x] Calcular ángulo de rodilla en el frame de aterrizaje (reutilizar `BiomecanicaService`)
 - [x] Calcular flexión máxima de rodilla en los frames posteriores al aterrizaje (pico de amortiguación)
 - [x] Calcular rango de amortiguación: diferencia entre ángulo al contacto y flexión máxima
-- [x] Devolver `amortiguacion_deg` (rango de flexión) y `angulo_rodilla_aterrizaje_deg` en JSON
+- [x] Devolver `amortiguacion` como objeto JSON (`angulo_rodilla_aterrizaje_deg`, `flexion_maxima_deg`, `rango_amortiguacion_deg`, `alerta_rigidez`)
 - [x] Alerta si amortiguación < 20° (recepción rígida, riesgo de lesión)
 
 ### 6.3 Simetría en la recepción
@@ -139,7 +140,7 @@ Objetivo: pasar de **métricas puntuales** (un ángulo en un frame) a **curvas t
 - [x] Calcular ángulo de rodilla en cada frame del salto (desde N frames antes del despegue hasta N frames después del aterrizaje)
 - [x] Calcular ángulo de cadera en cada frame del salto
 - [x] Suavizar curvas con media móvil (3–5 frames) para filtrar ruido de MediaPipe
-- [x] Devolver arrays `curva_rodilla_deg[]` y `curva_cadera_deg[]` en la respuesta JSON (o en endpoint separado)
+- [x] Devolver curvas en `curvas_angulares` (`indices`, `rodilla_deg[]`, `cadera_deg[]`) en la respuesta JSON
 
 ### 7.2 Detección automática de fases del salto
 

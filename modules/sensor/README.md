@@ -1,6 +1,8 @@
-﻿# Módulo 1 — Sensor de Distancia HC-SR04
+﻿# Módulo 1 — Sensor de distancia HC-SR04
 
-Parte del proyecto **body-traking-anim3d**. Este módulo es autónomo: puede arrancarse, probarse y demostrarse sin depender del resto del proyecto.
+Parte del proyecto **body-tracking-anim3d**.
+
+Este módulo expone una API REST mínima con la última medición del sensor por puerto serie.
 
 ## Estructura
 
@@ -8,60 +10,52 @@ Parte del proyecto **body-traking-anim3d**. Este módulo es autónomo: puede arr
 sensor/
 ├── arduino/
 │   └── sensor_distancia/
-│       ├── sensor_distancia.ino   ← Sketch Arduino
+│       ├── sensor_distancia.ino
 │       └── README.md
-├── backend/                       ← Python MVC + Flask API
-│   ├── app.py                     ← Entry point web
-│   ├── main.py                    ← Entry point consola
-│   ├── config.py
-│   ├── controllers/
-│   ├── models/
-│   ├── views/
-│   ├── services/                  # Reservado
-│   └── utils/                     # Reservado
-└── frontend/                      ← Interfaz web del módulo
-    ├── index.html
-    ├── js/app.js
-    └── css/styles.css
+└── backend/
+    ├── app.py
+    ├── main.py
+    ├── config.py
+    ├── controllers/
+    ├── models/
+    └── views/
 ```
 
-## Cómo ejecutar
+## Ejecución del backend
+
+Desde la raíz del proyecto:
 
 ```powershell
-# Desde la raíz del proyecto (activar venv primero)
-
-# 1. Backend
-scripts\run_backend.bat          # o: cd modules\sensor\backend && python app.py
-
-# 2. Frontend
-scripts\run_frontend.bat         # o: cd modules\sensor\frontend && python -m http.server 8080
+cd modules\sensor\backend
+python app.py
 ```
 
-Backend en `http://localhost:5000/distancia`
-Frontend en `http://localhost:8080`
+Comportamiento de protocolo:
+
+- Si existen certificados en `certs/cert.pem` y `certs/key.pem`, arranca en HTTPS.
+- Si no existen, arranca en HTTP.
+
+Endpoint principal:
+
+```text
+GET /distancia
+```
+
+Ejemplo de respuesta:
 
 ```json
 { "valor": 23.45, "unidad": "cm", "raw": "Distancia: 23.45 cm", "timestamp": "2026-03-18T10:30:00+00:00" }
 ```
 
-## Arquitectura interna
+## Uso con frontend
 
-```
-Arduino (HC-SR04)
-      │  Serial USB · 9600 baudios
-      ▼
-SensorSerial          (Model)       — lee y parsea líneas del puerto serie
-      │
-DistanciaController   (Controller)  — hilo daemon + estado thread-safe
-      │
-Flask app.py          (API)         — GET /distancia → JSON
-      │
-frontend/app.js       (Frontend)    — fetch cada 1 s → actualiza DOM
-```
+El frontend integrado está en `integration/web/arduino.html` y consume este endpoint en polling.
 
-## Estado — Fase 1
+Para levantar todo el entorno integrado, usa `scripts/run_all.bat` desde la raíz.
+
+## Estado
 
 - [x] Sketch Arduino funcional
 - [x] Backend MVC funcional
-- [x] API REST expuesta (`GET /distancia` con `valor`, `unidad`, `raw`, `timestamp`)
-- [x] Frontend conectado al endpoint
+- [x] API REST expuesta (`GET /distancia`)
+- [x] Integración con frontend unificado en `integration/web/`

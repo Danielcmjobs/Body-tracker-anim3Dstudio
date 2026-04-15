@@ -21,6 +21,9 @@ scripts\run_all.bat
 2. Abrir:
 - https://localhost:8443
 
+Alternativa legacy:
+- http://localhost:8080 (frontend HTTP manual)
+
 3. Seleccionar usuario activo en salto.html.
 
 ## Matriz de pruebas

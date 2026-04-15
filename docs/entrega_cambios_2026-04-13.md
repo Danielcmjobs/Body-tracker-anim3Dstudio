@@ -178,6 +178,11 @@ En resultados de salto, los campos relevantes son:
 4. Abrir:
    - https://localhost:8443
 
+Modo alternativo (legacy):
+
+- Frontend HTTP manual en `http://localhost:8080` con `python -m http.server 8080`.
+- Para entorno totalmente HTTP, arrancar sin certificados locales en `certs/`.
+
 Validacion minima:
 
 - Hacer 1 salto en tiempo real y 1 en galeria.

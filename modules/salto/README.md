@@ -1,6 +1,6 @@
 # Módulo 2 — Cálculo de Salto (Vertical y Horizontal)
 
-Parte del proyecto **proyecto-medicion**. Este módulo es autónomo: puede arrancarse, probarse y demostrarse sin depender del resto del proyecto.
+Parte del proyecto **body-tracking-anim3d**. Este módulo es autónomo: puede arrancarse, probarse y demostrarse sin depender del resto del proyecto.
 
 Recibe un vídeo grabado desde un móvil, lo analiza fotograma a fotograma con **MediaPipe Pose** y calcula la distancia del salto (vertical u horizontal).
 
@@ -44,7 +44,10 @@ cd modules\salto\backend
 python app.py
 ```
 
-Backend en `http://localhost:5001`
+Comportamiento de protocolo:
+
+- Si existen certificados en `certs/cert.pem` y `certs/key.pem`, arranca en HTTPS.
+- Si no existen, arranca en HTTP.
 
 ## Endpoints
 
@@ -63,6 +66,7 @@ Content-Type: multipart/form-data
 | `id_usuario` | int | Opcional | Si se envía, el resultado se guarda automáticamente en BD |
 | `metodo_origen` | string | Opcional | `"ia_vivo"`, `"video_galeria"` o `"sensor_arduino"` (default: `video_galeria`) |
 | `guardar_video_bd` | bool | Opcional | Si es `true` y se guarda salto, persiste el vídeo en BD |
+| `incluir_landmarks` | bool | Opcional | Si es `true`, devuelve `landmarks_frames` inline en la respuesta |
 
 **Respuesta JSON:**
 
@@ -82,7 +86,8 @@ Content-Type: multipart/form-data
   "metodo": "hibrido",
   "dist_por_pixeles": 36.45,
   "dist_por_cinematica": 30.67,
-  "estabilidad_aterrizaje": {
+  "estabilidad_aterrizaje": 82.6,
+  "estabilidad_detalle": {
     "oscilacion_px": 3.45,
     "tiempo_estabilizacion_s": 0.267,
     "estable": true
@@ -111,8 +116,7 @@ Content-Type: multipart/form-data
   "velocidades_articulares": {
     "vel_rodilla_deg_s": [12.5, 25.3, "..."],
     "vel_cadera_deg_s": [8.1, 15.6, "..."],
-    "pico_vel_rodilla": 485.2,
-    "pico_vel_cadera": 312.8
+    "pico_vel_rodilla": { "valor_deg_s": 485.2, "frame_idx": 44 }
   },
   "resumen_gesto": {
     "pico_flexion_rodilla": { "valor_deg": 98.5, "frame_idx": 35 },
@@ -120,12 +124,21 @@ Content-Type: multipart/form-data
     "rom_rodilla_deg": 73.8,
     "rom_cadera_deg": 45.2,
     "ratio_excentrico_concentrico": 1.14
-  }
+  },
+  "factor_slowmo": 1.0,
+  "landmarks_frames": [
+    {
+      "frame_idx": 0,
+      "timestamp_s": 0.0,
+      "landmarks": [{ "x": 0.51, "y": 0.23, "z": -0.12, "visibility": 0.98 }]
+    }
+  ]
 }
 ```
 
 > Los campos `metodo`, `dist_por_pixeles` y `dist_por_cinematica` solo aparecen en salto vertical.
-> Los campos de Fases 6-7 (`estabilidad_aterrizaje`, `amortiguacion`, etc.) son `null` si no se detectó un salto válido (despegue + aterrizaje).
+> `estabilidad_aterrizaje` es el score numérico global; el detalle biomecánico va en `estabilidad_detalle`.
+> Los campos de Fases 6-7 (`estabilidad_detalle`, `amortiguacion`, etc.) son `null` si no se detectó un salto válido (despegue + aterrizaje).
 
 ### Vídeo anotado con overlay
 

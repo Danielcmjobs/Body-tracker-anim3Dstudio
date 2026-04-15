@@ -65,13 +65,15 @@
      "factor_slowmo": 1.0,
      "dist_por_pixeles": 36.45,
      "dist_por_cinematica": 30.67,
-     "estabilidad_aterrizaje": { "oscilacion_px": 3.45, "tiempo_estabilizacion_s": 0.267, "estable": true },
+     "estabilidad_aterrizaje": 82.6,
+     "estabilidad_detalle": { "oscilacion_px": 3.45, "tiempo_estabilizacion_s": 0.267, "estable": true },
      "amortiguacion": { "angulo_rodilla_aterrizaje_deg": 155.2, "flexion_maxima_deg": 118.7, "rango_amortiguacion_deg": 36.5, "alerta_rigidez": false },
      "asimetria_recepcion_pct": 6.2,
      "curvas_angulares": { "frame_inicio": 27, "frame_fin": 73, "rodilla_deg": [...], "cadera_deg": [...] },
      "fases_salto": [ { "fase": "preparatoria", "frame_inicio": 27, "frame_fin": 35 }, "..." ],
      "velocidades_articulares": { "vel_rodilla_deg_s": [...], "pico_vel_rodilla": 485.2, "..." },
-     "resumen_gesto": { "rom_rodilla_deg": 73.8, "rom_cadera_deg": 45.2, "ratio_excentrico_concentrico": 1.14, "..." }
+     "resumen_gesto": { "rom_rodilla_deg": 73.8, "rom_cadera_deg": 45.2, "ratio_excentrico_concentrico": 1.14, "..." },
+     "landmarks_frames": []
    }
    ```
 7. Si se envió `id_usuario` en la petición, el resultado se **persiste automáticamente** en la tabla `saltos` de MySQL y la respuesta incluye `id_salto`.

@@ -48,6 +48,16 @@ mysql -u root -p < scripts\init_db.sql
 
 Doble clic en **`scripts\run_all.bat`**. Se abrirán tres ventanas de terminal automáticamente.
 
+URL recomendada:
+
+- **https://localhost:8443**
+
+Si es la primera vez o cambiaste de red, genera certificado local:
+
+```powershell
+.\.venv\Scripts\python.exe scripts\generate_cert.py
+```
+
 ### Opción manual
 
 Abrir tres terminales y ejecutar en cada una:
@@ -56,9 +66,23 @@ Abrir tres terminales y ejecutar en cada una:
 |----------|---------|--------|
 | Backend Salto | `cd modules\salto\backend` → `python app.py` | 5001 |
 | Backend Sensor | `cd modules\sensor\backend` → `python app.py` | 5000 |
-| Frontend Web | `cd integration\web` → `python -m http.server 8080` | 8080 |
+| Frontend Web HTTPS | `cd .` → `python scripts\https_server.py` | 8443 |
 
-Una vez arrancado, abrir en el navegador: **http://localhost:8080**
+Una vez arrancado, abrir en el navegador: **https://localhost:8443**
+
+### Modo HTTP (compatibilidad)
+
+También puedes usar frontend en HTTP para pruebas legacy:
+
+| Terminal | Comando | Puerto |
+|----------|---------|--------|
+| Frontend Web HTTP | `cd integration\web` → `python -m http.server 8080` | 8080 |
+
+URL HTTP:
+
+- **http://localhost:8080**
+
+Nota: si existen certificados en `certs/`, los backends arrancan en HTTPS automáticamente.
 
 ---
 
@@ -182,6 +206,15 @@ Botón **"Descargar vídeo anotado"** que solicita al backend un vídeo con over
 
 El vídeo se descarga como archivo `.mp4`.
 
+##### Panel landmarks 2D/3D
+
+Cuando hay landmarks disponibles, aparece un panel de esqueleto frame a frame con:
+
+- Slider de navegación por frame.
+- Vista **2D** en canvas.
+- Vista **3D** con rotación/zoom.
+- Etiqueta de tiempo por frame.
+
 #### 5. Repetir
 
 Pulsar **"Nuevo Salto"** para volver a la vista de cámara y hacer otro intento.
@@ -239,12 +272,11 @@ Si quieres grabar un salto con la cámara del móvil:
    ipconfig
    ```
    Busca la dirección IPv4 (ej: `192.168.1.42`).
-3. En el móvil, abre el navegador y escribe: `http://192.168.1.42:8080`
-4. Si la cámara no se activa, puede ser porque el navegador exige HTTPS. Solución rápida en Chrome Android:
-   - Ir a `chrome://flags`
-   - Buscar **"Insecure origins treated as secure"**
-   - Añadir `http://192.168.1.42:8080`
-   - Reiniciar Chrome
+3. Ejecuta la app con HTTPS (recomendado) y abre en el móvil:
+   - `https://192.168.1.42:8443`
+4. Acepta el aviso del certificado local en el navegador del móvil.
+5. Modo HTTP legacy (no recomendado para cámara):
+   - `http://192.168.1.42:8080`
 
 ---
 
@@ -254,7 +286,7 @@ Si quieres grabar un salto con la cámara del móvil:
 |----------|---------------|----------|
 | "Error al conectar con localhost:5001" | Backend de salto no está arrancado | Ejecutar `python app.py` en `modules/salto/backend` |
 | "Error al conectar con localhost:5000" | Backend del sensor no está arrancado | Ejecutar `python app.py` en `modules/sensor/backend` |
-| La cámara no se activa | No se dieron permisos / no hay HTTPS | Aceptar permisos del navegador. Desde móvil, ver sección 6 |
+| La cámara no se activa | No se dieron permisos / protocolo no seguro | Aceptar permisos del navegador y usar HTTPS (`https://...`). Desde móvil, ver sección 6 |
 | "Introduce una altura válida" | Campo de altura vacío o con valor ≤ 0 | Escribir la estatura en metros (ej: 1.75) |
 | "Extensión no permitida" | Formato de vídeo no soportado | Usar .mp4, .webm, .avi o .mov |
 | Badge rojo en sensor | Arduino no conectado o backend caído | Verificar USB + que el backend esté corriendo |
@@ -303,6 +335,7 @@ El endpoint `POST /api/salto/calcular` acepta opcionalmente:
 | `id_usuario` | int | Si se envía, el resultado se guarda automáticamente en BD |
 | `metodo_origen` | string | `"ia_vivo"`, `"video_galeria"` o `"sensor_arduino"` (por defecto: `video_galeria`) |
 | `guardar_video_bd` | bool | Si es `true` y se guarda salto, persiste el vídeo en BD |
+| `incluir_landmarks` | bool | Si es `true`, la respuesta puede incluir `landmarks_frames` para el visor 2D/3D |
 
 La respuesta incluirá `id_salto` si el guardado fue exitoso.
 

@@ -1,78 +1,83 @@
-# Ejecución del Proyecto: Web y Backend de Salto
+# Integración Web y Backends
 
-Esta guía detalla los pasos necesarios para iniciar el entorno de desarrollo local, activando tanto el motor de visión artificial (backend) como la interfaz de usuario (frontend).
+Esta guía explica cómo levantar la integración completa (frontend + APIs de salto y sensor) en desarrollo local.
 
-## 1. Iniciar el Backend (Motor de IA)
+## Opción recomendada (HTTPS)
 
-El servidor Python es responsable de procesar los vídeos utilizando MediaPipe y devolver las mediciones. Es necesario arrancarlo en primer lugar.
+Desde la raíz del proyecto:
 
-1. Abrir una terminal.
-2. Navegar al directorio del backend:
-
-```bash
-cd modules/salto/backend
+```powershell
+scripts\run_all.bat
 ```
 
-3. Ejecutar el script principal:
+Accede en navegador a:
 
-```bash
+```text
+https://localhost:8443
+```
+
+Si quieres usar móvil por LAN, genera antes el certificado local:
+
+```powershell
+.\.venv\Scripts\python.exe scripts\generate_cert.py
+```
+
+Y abre en el móvil:
+
+```text
+https://TU_IP_LAN:8443
+```
+
+## Opción manual
+
+### Backend salto
+
+```powershell
+cd modules\salto\backend
 python app.py
 ```
 
-**Nota:** La terminal debe indicar que el servicio está activo y escuchando en el puerto 5001.
+### Backend sensor
 
-## 2. Iniciar el Frontend (Interfaz Web)
-
-La página web necesita su propio servidor de archivos estáticos para cargar los recursos (HTML, CSS, JS) y permitir la conexión desde otros dispositivos en la red.
-
-1. Abrir una nueva terminal (es imprescindible mantener la del backend ejecutándose en segundo plano).
-2. Navegar al directorio donde se encuentra la web:
-
-```bash
-cd integration/web
+```powershell
+cd modules\sensor\backend
+python app.py
 ```
 
-3. Levantar el servidor HTTP nativo de Python en el puerto 8080:
+### Frontend HTTPS
 
-```bash
+```powershell
+cd .
+python scripts\https_server.py
+```
+
+## Modo HTTP (compatibilidad)
+
+También puedes servir frontend en HTTP para pruebas legacy:
+
+```powershell
+cd integration\web
 python -m http.server 8080
 ```
 
-## 3. Acceder a la Aplicación
+URL:
 
-El método de acceso varía dependiendo de si se utiliza el mismo equipo de desarrollo o un dispositivo externo.
-
-### Pruebas desde el mismo ordenador
-
-Abrir cualquier navegador web y escribir la siguiente dirección:
-
+```text
 http://localhost:8080
+```
 
-### Pruebas desde un dispositivo móvil (Recomendado para usar la cámara)
+Importante: los backends arrancan en HTTPS automáticamente si existen los certificados en `certs/`. Si necesitas un entorno totalmente HTTP, arranca sin certificados locales.
 
-1. El teléfono móvil y el ordenador principal deben estar conectados a la misma red WiFi.
-2. Averiguar la dirección IP local del ordenador (por ejemplo, mediante el comando `ipconfig` en Windows o `ifconfig` en macOS/Linux). Suelen tener el formato `192.168.1.X`.
-3. Abrir el navegador en el teléfono móvil y escribir la IP seguida del puerto:
+## Resolución de problemas rápida
 
-http://192.168.1.X:8080
+- Si no carga cámara en móvil: usa HTTPS (`https://...`) en lugar de HTTP.
+- Si falla conexión al backend desde frontend: revisa protocolo y puerto (5000 sensor, 5001 salto).
+- Si cambias de red y falla HTTPS LAN: regenera certificado con `scripts/generate_cert.py`.
 
-## Resolución de Problemas (Troubleshooting)
+## Interfaz gráfica
 
-### Pantalla negra en la cámara (Dispositivos Móviles)
-
-Por políticas de seguridad, los navegadores bloquean la cámara en conexiones no seguras (`http://` con IPs locales). Para sortear esta restricción en entornos de desarrollo utilizando Android/Chrome:
-
-1. Escribir `chrome://flags/#unsafely-treat-insecure-origin-as-secure` en la barra de direcciones del navegador móvil.
-2. Cambiar el menú desplegable resaltado a **Enabled**.
-3. En el cuadro de texto inferior, introducir la dirección completa utilizada para acceder (ej. `http://192.168.1.130:8080`).
-4. Pulsar el botón de reinicio del navegador que aparecerá en la parte inferior de la pantalla.
-
-## Interfaz Gráfica
-
-A continuación se muestra el diseño de las pantallas principales de la aplicación:
-
-| Pantalla de Inicio | Cámara en Vivo  |
+| Pantalla de inicio | Cámara en vivo |
 | :---: | :---: |
 | ![Inicio](../img/capturas/inicio.jpeg) | ![Cámara Salto](../img/capturas/salto.jpeg) |
-| **Resultados del Análisis** | **Monitor del Sensor Ultrasónico** |
+| **Resultados del análisis** | **Monitor del sensor ultrasónico** |
 | ![Resultados](../img/capturas/resultados.jpeg) | ![Monitor Sensor](../img/capturas/sensor.jpeg) |

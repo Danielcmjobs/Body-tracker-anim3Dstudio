@@ -53,11 +53,17 @@ modules/
 └── salto/           ← Módulo 2: backend/ (MVC + MediaPipe) + mobile/ (futuro)
 
 integration/web/     ← Frontend web unificado (index + salto + sensor)
-scripts/             ← run_all.bat para arrancar todo
+scripts/             ← run_all.bat + https_server.py para arrancar todo
 ```
 
 El frontend unificado en `integration/web/` consume ambos backends.
 Cada módulo expone solo su API REST; no tiene frontend propio.
+
+## Protocolos en desarrollo (HTTP/HTTPS)
+
+- **Modo recomendado:** HTTPS (`https://localhost:8443`) con `scripts/run_all.bat`.
+- **Modo compatibilidad:** HTTP (`http://localhost:8080`) con servidor estático manual.
+- Los backends pueden arrancar en HTTP o HTTPS según disponibilidad de certificados en `certs/`.
 
 ### Detalle — backend módulo salto
 
