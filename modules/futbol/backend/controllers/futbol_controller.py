@@ -7,10 +7,12 @@ from services.calculo_service import CalculoService
 
 
 class FutbolController:
+    # Inicializa servicios de procesado y calculo.
     def __init__(self) -> None:
         self.processor = VideoProcessor()
         self.calculo = CalculoService()
 
+    # Ejecuta el pipeline de analisis del golpeo y arma la respuesta final.
     def procesar_golpeo(self, ruta_video: str, incluir_landmarks: bool = False) -> dict:
         frames, info = self.processor.procesar(ruta_video)
         if not frames or info is None:

@@ -5,6 +5,7 @@ Funciones geometricas basicas para biomecanica.
 import math
 
 
+# Calcula el angulo en grados entre tres puntos.
 def angulo_3p(a: tuple[float, float], b: tuple[float, float], c: tuple[float, float]) -> float | None:
     if not a or not b or not c:
         return None
@@ -21,6 +22,7 @@ def angulo_3p(a: tuple[float, float], b: tuple[float, float], c: tuple[float, fl
     return math.degrees(math.acos(cos_ang))
 
 
+# Devuelve el punto medio entre dos coordenadas.
 def mid_point(a: tuple[float, float] | None, b: tuple[float, float] | None) -> tuple[float, float] | None:
     if not a or not b:
         return None

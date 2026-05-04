@@ -1,5 +1,6 @@
 // futbol.js — flujo de grabacion y resultados.
 
+// Inicializa el flujo de grabacion cuando el DOM esta listo.
 document.addEventListener('DOMContentLoaded', () => {
     const videoElement = document.getElementById('vista-camara');
     const btnGrabar = document.getElementById('btn-grabar');
@@ -13,6 +14,7 @@ document.addEventListener('DOMContentLoaded', () => {
     let stream = null;
     let grabando = false;
 
+    // Muestra un toast informativo temporal.
     function mostrarToast(mensaje, tipo = 'info', duracionMs = 2200) {
         const toast = document.getElementById('toast-aviso');
         if (!toast) {
@@ -21,10 +23,13 @@ document.addEventListener('DOMContentLoaded', () => {
         toast.textContent = mensaje;
         toast.classList.remove('info', 'success', 'warn', 'error', 'show');
         toast.classList.add(tipo);
+        // Dispara la animacion de entrada del toast.
         requestAnimationFrame(() => toast.classList.add('show'));
+        // Oculta el toast tras el tiempo indicado.
         setTimeout(() => toast.classList.remove('show'), duracionMs);
     }
 
+    // Solicita permisos y conecta el stream de la camara.
     async function iniciarCamara() {
         if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
             mostrarToast('El navegador no soporta camara.', 'error');
@@ -46,6 +51,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
+    // Detiene el stream y libera recursos de video.
     function detenerCamara() {
         if (stream) {
             stream.getTracks().forEach(track => track.stop());
@@ -54,6 +60,7 @@ document.addEventListener('DOMContentLoaded', () => {
         videoElement.srcObject = null;
     }
 
+    // Arranca la grabacion con MediaRecorder.
     async function iniciarGrabacion() {
         if (typeof MediaRecorder === 'undefined') {
             mostrarToast('La grabacion no esta soportada en este navegador.', 'error');
@@ -71,11 +78,13 @@ document.addEventListener('DOMContentLoaded', () => {
             ? 'video/webm; codecs=vp9'
             : 'video/webm';
         mediaRecorder = new MediaRecorder(stream, { mimeType });
+        // Acumula los fragmentos de video grabados.
         mediaRecorder.ondataavailable = (event) => {
             if (event.data && event.data.size > 0) {
                 chunks.push(event.data);
             }
         };
+        // Procesa el video una vez finaliza la grabacion.
         mediaRecorder.onstop = async () => {
             const videoBlob = new Blob(chunks, { type: 'video/webm' });
             await procesarVideo(videoBlob);
@@ -86,6 +95,7 @@ document.addEventListener('DOMContentLoaded', () => {
         btnText.textContent = 'Grabando...';
     }
 
+    // Detiene la grabacion y actualiza la UI.
     function detenerGrabacion() {
         if (mediaRecorder && grabando) {
             mediaRecorder.stop();
@@ -95,6 +105,7 @@ document.addEventListener('DOMContentLoaded', () => {
         btnText.textContent = 'Iniciar grabacion';
     }
 
+    // Envia el video al backend y muestra los resultados.
     async function procesarVideo(videoBlob) {
         mostrarToast('Procesando video...', 'info');
         try {
@@ -106,6 +117,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
+    // Vuelca las metricas calculadas en el panel.
     function pintarResultados(data) {
         setValor('data-pierna-apoyo', data.pierna_apoyo || '--');
         setValor('data-pierna-golpeo', data.pierna_golpeo || '--');
@@ -116,6 +128,7 @@ document.addEventListener('DOMContentLoaded', () => {
         setValor('data-confianza', formatearNumero(data.confianza));
     }
 
+    // Escribe un valor en el elemento indicado.
     function setValor(id, valor) {
         const nodo = document.getElementById(id);
         if (nodo) {
@@ -123,6 +136,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
+    // Formatea numeros con dos decimales o placeholder.
     function formatearNumero(valor) {
         if (valor === null || valor === undefined || Number.isNaN(Number(valor))) {
             return '--';
@@ -130,6 +144,7 @@ document.addEventListener('DOMContentLoaded', () => {
         return Number(valor).toFixed(2);
     }
 
+    // Formatea angulos en grados con un decimal.
     function formatearGrados(valor) {
         if (valor === null || valor === undefined || Number.isNaN(Number(valor))) {
             return '-- deg';
@@ -138,6 +153,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     if (btnGrabar) {
+        // Alterna entre iniciar y detener la grabacion.
         btnGrabar.addEventListener('click', async () => {
             if (!grabando) {
                 await iniciarGrabacion();
@@ -148,6 +164,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     if (inputArchivo) {
+        // Envia un video de la galeria para analizar.
         inputArchivo.addEventListener('change', async (evento) => {
             const archivo = evento.target.files[0];
             if (!archivo) {
@@ -168,6 +185,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     iniciarCamara();
 
+    // Asegura que la camara se libere al salir.
     window.addEventListener('beforeunload', () => {
         detenerCamara();
     });

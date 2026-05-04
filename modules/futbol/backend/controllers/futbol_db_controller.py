@@ -11,6 +11,7 @@ modelo = FutbolModel()
 
 
 @futbol_db_bp.route("/api/futbol/guardar", methods=["POST"])
+# Guarda un golpeo en la base de datos desde un payload JSON.
 def guardar_golpeo():
     data = request.get_json(silent=True) or {}
     id_usuario = data.get("id_usuario")
@@ -25,6 +26,7 @@ def guardar_golpeo():
 
 
 @futbol_db_bp.route("/api/futbol/usuario/<int:id_usuario>", methods=["GET"])
+# Devuelve el historial de golpes de un usuario.
 def obtener_golpeos(id_usuario: int):
     try:
         golpes = modelo.obtener_por_usuario(id_usuario)

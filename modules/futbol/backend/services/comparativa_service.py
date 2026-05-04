@@ -3,6 +3,7 @@ Espacio reservado para comparativas futuras.
 """
 
 
+# Compara las metricas del usuario contra una referencia fija.
 def comparar_con_referencia(metricas_usuario: dict) -> dict:
     referencia = {
         "angulo_cadera_deg": 85.0,

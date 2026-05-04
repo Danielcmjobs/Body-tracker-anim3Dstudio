@@ -9,6 +9,7 @@ from config import DB_CONFIG
 _pool: pooling.MySQLConnectionPool | None = None
 
 
+# Crea o reutiliza el pool de conexiones MySQL.
 def _get_pool() -> pooling.MySQLConnectionPool:
     global _pool
     if _pool is None:
@@ -22,6 +23,7 @@ def _get_pool() -> pooling.MySQLConnectionPool:
 
 
 class get_connection:
+    # Abre una conexion y cursor con diccionarios.
     def __enter__(self):
         self.conn = _get_pool().get_connection()
         try:
@@ -31,6 +33,7 @@ class get_connection:
             raise
         return self.conn, self.cursor
 
+    # Confirma o revierte la transaccion y libera recursos.
     def __exit__(self, exc_type, exc_val, exc_tb):
         if exc_type:
             self.conn.rollback()

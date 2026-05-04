@@ -1,6 +1,7 @@
 // api_futbol.js — llamadas al backend de futbol.
 // getFutbolBaseUrl() se carga desde js/config.js
 
+// Llama al backend y devuelve JSON con manejo de errores.
 async function fetchJsonFutbol(url, options = {}) {
     let respuesta;
     try {
@@ -30,6 +31,7 @@ async function fetchJsonFutbol(url, options = {}) {
     return payload;
 }
 
+// Envia el video grabado al endpoint de analisis.
 async function analizarGolpeo(videoBlob) {
     const formData = new FormData();
     formData.append('video', videoBlob, 'golpeo.webm');

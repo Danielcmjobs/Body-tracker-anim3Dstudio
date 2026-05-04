@@ -9,6 +9,7 @@ from utils.serializers import normalizar_float
 
 
 class FutbolModel:
+    # Inserta un golpeo en la base de datos y devuelve el payload guardado.
     def guardar_golpeo(self, id_usuario: int, data: dict) -> dict:
         payload = {
             "angulo_cadera_deg": normalizar_float(data.get("angulo_cadera_deg")),
@@ -44,6 +45,7 @@ class FutbolModel:
 
         return payload
 
+    # Recupera los golpes almacenados de un usuario.
     def obtener_por_usuario(self, id_usuario: int) -> list[dict]:
         with get_connection() as (conn, cursor):
             cursor.execute(

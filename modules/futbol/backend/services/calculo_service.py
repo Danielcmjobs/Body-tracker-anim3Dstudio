@@ -8,6 +8,7 @@ from services.biomecanica_service import angulo_3p, mid_point
 
 
 class CalculoService:
+    # Calcula angulos y estabilidad a partir de los frames validos.
     def calcular_metricas(self, frames: list, info) -> dict:
         frames_validos = [f for f in frames if f.cadera_izq and f.cadera_der]
         if not frames_validos:
@@ -63,6 +64,7 @@ class CalculoService:
         }
 
 
+# Promedia valores ignorando None.
 def _promedio(valores: list[float | None]) -> float | None:
     datos = [v for v in valores if v is not None]
     if not datos:
@@ -70,6 +72,7 @@ def _promedio(valores: list[float | None]) -> float | None:
     return sum(datos) / len(datos)
 
 
+# Decide la pierna con menor angulo de rodilla.
 def _menor_angulo(izq: float | None, der: float | None) -> str:
     if izq is None and der is None:
         return "izq"
@@ -80,6 +83,7 @@ def _menor_angulo(izq: float | None, der: float | None) -> str:
     return "izq" if izq < der else "der"
 
 
+# Estima estabilidad del tronco a partir del desvio horizontal.
 def _estabilidad_tronco(frames: list, ancho: int) -> float | None:
     if ancho <= 0:
         return None
@@ -99,6 +103,7 @@ def _estabilidad_tronco(frames: list, ancho: int) -> float | None:
     return score
 
 
+# Redondea valores numericos o conserva None.
 def _redondear(valor: float | None) -> float | None:
     if valor is None:
         return None

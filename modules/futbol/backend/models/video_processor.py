@@ -39,6 +39,7 @@ class InfoVideo:
 
 class VideoProcessor:
     @staticmethod
+    # Construye el landmarker de MediaPipe con la configuracion actual.
     def _crear_landmarker():
         options = PoseLandmarkerOptions(
             base_options=BaseOptions(model_asset_path=MODEL_PATH),
@@ -49,6 +50,7 @@ class VideoProcessor:
         )
         return PoseLandmarker.create_from_options(options)
 
+    # Recorre el video y extrae poses por frame.
     def procesar(self, ruta_video: str) -> tuple[list[FramePose], InfoVideo | None]:
         cap = cv2.VideoCapture(ruta_video)
         if not cap.isOpened():
@@ -87,6 +89,7 @@ class VideoProcessor:
         return frames, info
 
     @staticmethod
+    # Convierte la salida del landmarker en un FramePose con coordenadas absolutas.
     def _extraer_pose(resultado, idx: int, fps: float, ancho: int, alto: int) -> FramePose:
         if not resultado.pose_landmarks:
             return FramePose(
@@ -107,9 +110,11 @@ class VideoProcessor:
 
         lm = resultado.pose_landmarks[0]
 
+        # Convierte un landmark en coordenadas absolutas.
         def punto(i: int) -> tuple[float, float]:
             return (lm[i].x * ancho, lm[i].y * alto)
 
+        # Normaliza landmarks a un formato serializable.
         def normalizar_landmarks():
             salida = []
             for l in lm:

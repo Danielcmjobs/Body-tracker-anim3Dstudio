@@ -39,11 +39,13 @@ os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
 
 @app.errorhandler(413)
+# Responde cuando el archivo subido supera el limite permitido.
 def archivo_demasiado_grande(_e):
     return jsonify({"error": f"El archivo excede el limite de {MAX_UPLOAD_MB} MB"}), 413
 
 
 @app.route("/api/futbol/analizar", methods=["POST"])
+# Recibe un video, valida formato y devuelve las metricas del golpeo.
 def analizar_golpeo():
     if "video" not in request.files:
         return jsonify({"error": "No se recibio ningun archivo de video"}), 400
