@@ -24,16 +24,20 @@ from config import (
 )
 from controllers.futbol_controller import FutbolController
 from controllers.futbol_db_controller import futbol_db_bp
+from controllers.usuarios_futbol_controller import usuarios_futbol_bp
 from models.futbol_model import FutbolModel
+from models.usuarios_futbol_model import UsuariosFutbolModel
 
 app = Flask(__name__)
 app.config["MAX_CONTENT_LENGTH"] = MAX_UPLOAD_MB * 1024 * 1024
 CORS(app, origins=CORS_ORIGINS)
 
 app.register_blueprint(futbol_db_bp)
+app.register_blueprint(usuarios_futbol_bp)
 
 controller = FutbolController()
 modelo_futbol = FutbolModel()
+modelo_usuario = UsuariosFutbolModel()
 
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
@@ -68,15 +72,54 @@ def analizar_golpeo():
         "1", "true", "si", "yes"
     })
 
-    resultado = controller.procesar_golpeo(ruta_video, incluir_landmarks=incluir_landmarks)
+    try:
+        resultado = controller.procesar_golpeo(ruta_video, incluir_landmarks=incluir_landmarks)
+    except Exception as e:
+        app.logger.error(f"Error al procesar el video: {e}", exc_info=True)
+        return jsonify({"error": "Ocurrió un error interno al procesar el video."}), 500
+
 
     id_usuario = request.form.get("id_usuario")
+    guardar_video_bd = (request.form.get("guardar_video_bd", "false").strip().lower() in {
+        "1", "true", "si", "yes"
+    })
     guardar_bd = request.form.get("guardar_bd", "false").strip().lower() in {"1", "true", "si", "yes"}
+    guardar_bd = guardar_bd or guardar_video_bd
+
     if guardar_bd and id_usuario:
         try:
-            modelo_futbol.guardar_golpeo(int(id_usuario), resultado)
-        except Exception:
+            id_usuario_int = int(id_usuario)
+        except (ValueError, TypeError):
+            return jsonify({"error": "id_usuario debe ser un entero"}), 400
+
+        if not modelo_usuario.obtener_por_id(id_usuario_int):
+            return jsonify({"error": "Usuario no encontrado"}), 404
+
+        metodo_origen = request.form.get("metodo_origen", "video_galeria").strip().lower()
+        if metodo_origen not in {"ia_vivo", "video_galeria"}:
+            metodo_origen = "video_galeria"
+
+        try:
+            payload = modelo_futbol.guardar_golpeo(id_usuario_int, resultado, metodo_origen=metodo_origen)
+            resultado["id_golpeo"] = payload.get("id_golpeo")
+        except Exception as e:
+            app.logger.error(f"Error al guardar el golpeo en la BD: {e}", exc_info=True)
             return jsonify({"error": "No se pudo guardar el golpeo en la base de datos."}), 500
+
+        if guardar_video_bd and resultado.get("id_golpeo"):
+            try:
+                with open(ruta_video, "rb") as f:
+                    video_bytes = f.read()
+                guardado = modelo_futbol.guardar_video_bd(
+                    id_golpeo=int(resultado["id_golpeo"]),
+                    video_bytes=video_bytes,
+                    video_nombre=secure_filename(archivo.filename) or nombre_archivo,
+                    video_mime=archivo.mimetype,
+                )
+                resultado["video_guardado_bd"] = bool(guardado)
+            except Exception as e:
+                app.logger.error(f"Error al guardar el video en la BD: {e}", exc_info=True)
+                resultado["video_guardado_bd"] = False
 
     return jsonify(resultado)
 

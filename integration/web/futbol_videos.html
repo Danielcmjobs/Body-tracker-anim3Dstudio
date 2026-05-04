@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Biblioteca de videos - Futbol</title>
+    <link rel="stylesheet" href="css/style.css">
+</head>
+<body class="videos-page">
+    <header class="top-bar">
+        <a href="futbol.html" class="back-button"><span class="arrow">←</span> Volver</a>
+        <h1 class="header-title">Biblioteca de videos (Futbol)</h1>
+    </header>
+
+    <main class="videos-layout">
+        <section class="videos-filtros">
+            <label class="pre-camera-label" for="filtro-usuario">Usuario</label>
+            <select id="filtro-usuario" class="modern-input"></select>
+
+            <button id="btn-refrescar-videos" class="sensor-btn secondary-btn" type="button">Actualizar videos</button>
+            <p id="videos-estado" class="sensor-nota">Cargando biblioteca...</p>
+        </section>
+
+        <section class="videos-seccion">
+            <h2 class="panel-title">Comparativas (grupos de 4)</h2>
+            <div id="comparativas-container" class="videos-grid"></div>
+            <p id="comparativas-empty" class="sensor-nota" style="display:none;">No hay videos de comparativa con los filtros actuales.</p>
+        </section>
+
+        <section class="videos-seccion">
+            <h2 class="panel-title">Videos individuales</h2>
+            <div id="individuales-container" class="videos-grid"></div>
+            <p id="individuales-empty" class="sensor-nota" style="display:none;">No hay videos individuales con los filtros actuales.</p>
+        </section>
+    </main>
+
+    <script src="js/config.js"></script>
+    <script src="js/api_futbol.js"></script>
+    <script src="js/futbol_videos.js"></script>
+</body>
+</html>

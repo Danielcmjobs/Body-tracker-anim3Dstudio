@@ -1,17 +1,12 @@
-// getBackendBaseUrl() se carga desde js/config.js
-// fetchJson() se carga desde js/api-client.js
+// getFutbolBaseUrl() se carga desde js/config.js
+// fetchJsonFutbol() se carga desde js/api_futbol.js
+
+const API_URL_FUTBOL_USERS = `${getFutbolBaseUrl()}/api/usuarios_futbol`;
 
 function setUsuarioActivo(usuario) {
     sessionStorage.setItem('idUser', String(usuario.id_usuario));
     sessionStorage.setItem('aliasUser', usuario.alias);
-    sessionStorage.setItem('nombreUser', usuario.nombre_completo);
-    sessionStorage.setItem('alturaUser', String(usuario.altura_m));
-    sessionStorage.setItem('pesoUser', usuario.peso_kg != null ? String(usuario.peso_kg) : '');
-
-    const alturaInput = document.getElementById('altura-usuario');
-    if (alturaInput) {
-        alturaInput.value = usuario.altura_m;
-    }
+    sessionStorage.setItem('nombreUser', usuario.nombre);
 
     const estado = document.getElementById('usuario-estado');
     if (estado) {
@@ -28,13 +23,6 @@ function limpiarUsuarioActivo(mensaje = 'Sin usuario activo.') {
     sessionStorage.removeItem('idUser');
     sessionStorage.removeItem('aliasUser');
     sessionStorage.removeItem('nombreUser');
-    sessionStorage.removeItem('alturaUser');
-    sessionStorage.removeItem('pesoUser');
-
-    const alturaInput = document.getElementById('altura-usuario');
-    if (alturaInput) {
-        alturaInput.value = '';
-    }
 
     const estado = document.getElementById('usuario-estado');
     if (estado) {
@@ -47,116 +35,63 @@ function limpiarUsuarioActivo(mensaje = 'Sin usuario activo.') {
     }));
 }
 
-async function crearUsuario(data) {
-    return await fetchJson(API_URL_FUTBOL_USERS, {
+async function crearUsuario(alias, nombre) {
+    const body = { alias, nombre };
+    const payload = await fetchJsonFutbol(API_URL_FUTBOL_USERS, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(data)
+        body: JSON.stringify(body)
     });
+
+    return payload.id_usuario;
 }
 
-async function actualizarUsuario(id, data) {
-    return await fetchJson(`${API_URL_FUTBOL_USERS}/${id}`, {
+async function actualizarUsuario(idUsuario, alias, nombre) {
+    const body = { alias, nombre };
+    await fetchJsonFutbol(`${API_URL_FUTBOL_USERS}/${idUsuario}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(data)
+        body: JSON.stringify(body)
     });
 }
 
-async function eliminarUsuario(id) {
-    return await fetchJson(`${API_URL_FUTBOL_USERS}/${id}`, {
-        method: 'DELETE'
-    });
+async function eliminarUsuario(idUsuario) {
+    await fetchJsonFutbol(`${API_URL_FUTBOL_USERS}/${idUsuario}`, { method: 'DELETE' });
 }
 
-async function fetchUsuarios(paginado = true, search = '', limit = 20, offset = 0) {
-    const params = new URLSearchParams({
-        paginado: String(paginado),
+async function obtenerUsuariosPaginados({ search = '', limit = 20, offset = 0 }) {
+    const query = new URLSearchParams({
+        paginado: '1',
         search,
-        limit,
-        offset
+        limit: String(limit),
+        offset: String(offset)
     });
-    return await fetchJson(`${API_URL_FUTBOL_USERS}?${params.toString()}`);
+    const url = `${API_URL_FUTBOL_USERS}?${query.toString()}`;
+    const payload = await fetchJsonFutbol(url);
+    const items = Array.isArray(payload.usuarios) ? payload.usuarios : [];
+    const total = Number(payload.total || 0);
+    return {
+        items,
+        total,
+        limit,
+        offset,
+        has_more: (offset + items.length) < total,
+    };
 }
 
 document.addEventListener('DOMContentLoaded', () => {
-    const formRegistro = document.getElementById('registro-form');
-    const mensajeEstado = document.getElementById('mensaje-estado');
-    const btnSubmit = document.getElementById('btn-submit');
-
-    if (formRegistro && btnSubmit && mensajeEstado) {
-        formRegistro.addEventListener('submit', async (evento) => {
-            evento.preventDefault();
-
-            const alias = document.getElementById('alias').value.trim();
-            const nombreCompleto = document.getElementById('nombre_completo').value.trim();
-            const alturaM = parseFloat(document.getElementById('altura_m').value);
-            const pesoRaw = (document.getElementById('peso_kg')?.value || '').trim();
-            const pesoKg = pesoRaw ? parseFloat(pesoRaw) : null;
-
-            if (isNaN(alturaM) || alturaM < 0.50 || alturaM > 2.50) {
-                mensajeEstado.textContent = 'La altura debe estar entre 0.50 y 2.50 metros.';
-                mensajeEstado.style.color = '#ffb020';
-                return;
-            }
-
-            if (pesoKg !== null && (Number.isNaN(pesoKg) || pesoKg < 20 || pesoKg > 300)) {
-                mensajeEstado.textContent = 'El peso debe estar entre 20 y 300 kg.';
-                mensajeEstado.style.color = '#ffb020';
-                return;
-            }
-
-            const textoOriginal = btnSubmit.textContent;
-            btnSubmit.textContent = 'Guardando...';
-            btnSubmit.disabled = true;
-            mensajeEstado.textContent = '';
-
-            try {
-                const idUsuario = await crearUsuario({
-                    alias: alias,
-                    nombre_completo: nombreCompleto,
-                    altura_m: alturaM,
-                    peso_kg: pesoKg,
-                });
-
-                setUsuarioActivo({
-                    id_usuario: idUsuario,
-                    alias: alias,
-                    nombre_completo: nombreCompleto,
-                    altura_m: alturaM,
-                    peso_kg: pesoKg,
-                });
-
-                mensajeEstado.textContent = 'Usuario registrado correctamente.';
-                mensajeEstado.style.color = '#34c759';
-                formRegistro.reset();
-                setTimeout(() => {
-                    window.location.href = 'salto.html';
-                }, 1200);
-            } catch (error) {
-                mensajeEstado.textContent = `Error: ${error.message}`;
-                mensajeEstado.style.color = '#ff6b6b';
-            } finally {
-                btnSubmit.textContent = textoOriginal;
-                btnSubmit.disabled = false;
-            }
-        });
-    }
-
     const tablaBody = document.getElementById('tabla-usuarios-body');
     const tablaWrapper = document.getElementById('tabla-usuarios-wrapper');
     const inputBuscar = document.getElementById('buscar-usuario');
     const usuariosLoading = document.getElementById('usuarios-loading');
     const usuariosEmpty = document.getElementById('usuarios-empty');
     const btnRefrescar = document.getElementById('btn-refrescar-usuarios');
-    const btnCrearInline = document.getElementById('btn-crear-usuario-inline');
+    const btnCrearInline = document.getElementById('btn-guardar-usuario');
     const btnEditar = document.getElementById('btn-editar-usuario');
     const btnEliminar = document.getElementById('btn-eliminar-usuario');
     const btnCancelarEdicion = document.getElementById('btn-cancelar-edicion');
-    const inputAlias = document.getElementById('nuevo-alias');
-    const inputNombre = document.getElementById('nuevo-nombre');
-    const inputAltura = document.getElementById('nuevo-altura');
-    const inputPeso = document.getElementById('nuevo-peso');
+    const inputAlias = document.getElementById('form-alias');
+    const inputNombre = document.getElementById('form-nombre');
 
     const PAGE_SIZE = 20;
     let usuariosOffset = 0;
@@ -178,19 +113,15 @@ document.addEventListener('DOMContentLoaded', () => {
     function limpiarFormularioUsuario() {
         if (inputAlias) inputAlias.value = '';
         if (inputNombre) inputNombre.value = '';
-        if (inputAltura) inputAltura.value = '';
-        if (inputPeso) inputPeso.value = '';
     }
 
     function activarModoEdicion(usuario) {
-        if (!usuario || !inputAlias || !inputNombre || !inputAltura || !btnCrearInline || !btnCancelarEdicion) {
+        if (!usuario || !inputAlias || !inputNombre || !btnCrearInline || !btnCancelarEdicion) {
             return;
         }
         modoEdicion = true;
         inputAlias.value = usuario.alias || '';
-        inputNombre.value = usuario.nombre_completo || '';
-        inputAltura.value = String(usuario.altura_m ?? '');
-        if (inputPeso) inputPeso.value = usuario.peso_kg != null ? String(usuario.peso_kg) : '';
+        inputNombre.value = usuario.nombre || '';
         btnCrearInline.textContent = 'Guardar cambios';
         btnCancelarEdicion.style.display = 'block';
         setEstado(`Editando usuario: ${usuario.alias}`, '#c897ff');
@@ -201,16 +132,6 @@ document.addEventListener('DOMContentLoaded', () => {
         if (btnCrearInline) btnCrearInline.textContent = 'Crear usuario';
         if (btnCancelarEdicion) btnCancelarEdicion.style.display = 'none';
         limpiarFormularioUsuario();
-    }
-
-    function obtenerEdadTexto(u) {
-        if (u.edad !== undefined && u.edad !== null && String(u.edad).trim() !== '') {
-            return String(u.edad);
-        }
-        if (u.altura_m !== undefined && u.altura_m !== null) {
-            return `${u.altura_m} m`;
-        }
-        return '-';
     }
 
     function pintarFilaUsuario(u) {
@@ -225,21 +146,19 @@ document.addEventListener('DOMContentLoaded', () => {
             setUsuarioActivo({
                 id_usuario: u.id_usuario,
                 alias: u.alias,
-                nombre_completo: u.nombre_completo,
-                altura_m: Number(u.altura_m),
-                peso_kg: u.peso_kg != null ? Number(u.peso_kg) : null,
+                nombre: u.nombre,
             });
         }
 
-        const tdAlias = document.createElement('td');
-        tdAlias.textContent = u.alias || '';
-        const tdNombre = document.createElement('td');
-        tdNombre.textContent = u.nombre_completo || '';
-        const tdEdad = document.createElement('td');
-        tdEdad.textContent = obtenerEdadTexto(u);
-        const tdPeso = document.createElement('td');
-        tdPeso.textContent = u.peso_kg != null ? `${u.peso_kg} kg` : '-';
-        tr.append(tdAlias, tdNombre, tdEdad, tdPeso);
+        const tdUsuario = document.createElement('td');
+        const alias = u.alias || '';
+        const nombre = u.nombre || '';
+        if (alias && nombre) {
+            tdUsuario.textContent = `${nombre} · ${alias}`;
+        } else {
+            tdUsuario.textContent = nombre || alias || '--';
+        }
+        tr.append(tdUsuario);
 
         tr.addEventListener('click', () => {
             usuarioActivoId = Number(u.id_usuario);
@@ -249,9 +168,7 @@ document.addEventListener('DOMContentLoaded', () => {
             setUsuarioActivo({
                 id_usuario: u.id_usuario,
                 alias: u.alias,
-                nombre_completo: u.nombre_completo,
-                altura_m: Number(u.altura_m),
-                peso_kg: u.peso_kg != null ? Number(u.peso_kg) : null,
+                nombre: u.nombre,
             });
         });
 
@@ -359,7 +276,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 return;
             }
 
-            const confirmado = window.confirm(`¿Eliminar al usuario ${usuarioActivoData.alias}? Esta accion no se puede deshacer.`);
+            const confirmado = window.confirm(`Eliminar al usuario ${usuarioActivoData.alias}? Esta accion no se puede deshacer.`);
             if (!confirmado) {
                 return;
             }
@@ -397,22 +314,9 @@ document.addEventListener('DOMContentLoaded', () => {
         btnCrearInline.addEventListener('click', async () => {
             const alias = (inputAlias?.value || '').trim();
             const nombre = (inputNombre?.value || '').trim();
-            const altura = parseFloat(inputAltura?.value || '0');
-            const pesoRaw = (inputPeso?.value || '').trim();
-            const peso = pesoRaw ? parseFloat(pesoRaw) : null;
 
-            if (!alias || !nombre || !(altura > 0)) {
-                setEstado('Completa alias, nombre y altura.', '#ffb020');
-                return;
-            }
-
-            if (altura < 0.50 || altura > 2.50) {
-                setEstado('La altura debe estar entre 0.50 y 2.50 metros.', '#ffb020');
-                return;
-            }
-
-            if (peso !== null && (peso < 20 || peso > 300)) {
-                setEstado('El peso debe estar entre 20 y 300 kg.', '#ffb020');
+            if (!alias || !nombre) {
+                setEstado('Completa alias y nombre.', '#ffb020');
                 return;
             }
 
@@ -422,15 +326,10 @@ document.addEventListener('DOMContentLoaded', () => {
             btnCrearInline.textContent = modoEdicion ? 'Guardando...' : 'Creando...';
             try {
                 if (modoEdicion && usuarioActivoData) {
-                    await actualizarUsuario(usuarioActivoData.id_usuario, alias, nombre, altura, peso);
+                    await actualizarUsuario(usuarioActivoData.id_usuario, alias, nombre);
                     usuarioActivoId = usuarioActivoData.id_usuario;
                 } else {
-                    const idUsuario = await crearUsuario({
-                        alias: alias,
-                        nombre_completo: nombre,
-                        altura_m: altura,
-                        peso_kg: peso,
-                    });
+                    const idUsuario = await crearUsuario(alias, nombre);
                     usuarioActivoId = idUsuario;
                 }
 
@@ -440,18 +339,14 @@ document.addEventListener('DOMContentLoaded', () => {
                 const usuarioFinal = {
                     id_usuario: idFinal,
                     alias,
-                    nombre_completo: nombre,
-                    altura_m: altura,
-                    peso_kg: peso
+                    nombre
                 };
                 usuarioActivoData = usuarioFinal;
 
                 setUsuarioActivo({
                     id_usuario: idFinal,
                     alias,
-                    nombre_completo: nombre,
-                    altura_m: altura,
-                    peso_kg: peso
+                    nombre
                 });
 
                 desactivarModoEdicion();

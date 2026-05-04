@@ -1,13 +1,52 @@
 """
-Endpoints CRUD basicos para golpes de futbol.
+CONTROLADOR — Endpoints REST para golpes de futbol y biblioteca de videos.
+
+Rutas:
+    GET    /api/golpeos        -> Lista todos los golpeos
+    POST   /api/futbol/guardar -> Registra un golpeo manualmente
+    GET    /api/golpeos/<id>   -> Obtiene un golpeo
+    DELETE /api/golpeos/<id>   -> Elimina un golpeo
+    GET    /api/futbol/usuario/<id> -> Golpeos de un usuario
+    GET    /api/videos         -> Biblioteca de videos guardados
+    GET    /api/videos/<id>/stream -> Streaming de video guardado
 """
 
-from flask import Blueprint, jsonify, request
+from flask import Blueprint, Response, jsonify, request
+from mysql.connector import IntegrityError
 
 from models.futbol_model import FutbolModel
+from models.usuario_model import UsuarioModel
+from services.video_library_service import clasificar_videos
+from utils.serializers import serializar_row as _serializar
 
 futbol_db_bp = Blueprint("futbol_db", __name__)
 modelo = FutbolModel()
+usuario_model = UsuarioModel()
+
+
+def _parse_range_header(range_header: str, total_size: int) -> tuple[int, int] | None:
+    if not range_header or not range_header.startswith("bytes="):
+        return None
+
+    raw = range_header.replace("bytes=", "", 1).strip()
+    if "-" not in raw:
+        return None
+
+    start_s, end_s = raw.split("-", 1)
+    try:
+        start = int(start_s) if start_s else 0
+        end = int(end_s) if end_s else (total_size - 1)
+    except ValueError:
+        return None
+
+    if start < 0:
+        start = 0
+    if end >= total_size:
+        end = total_size - 1
+    if start > end:
+        return None
+
+    return start, end
 
 
 @futbol_db_bp.route("/api/futbol/guardar", methods=["POST"])
@@ -19,8 +58,22 @@ def guardar_golpeo():
         return jsonify({"error": "id_usuario es obligatorio"}), 400
 
     try:
-        payload = modelo.guardar_golpeo(int(id_usuario), data)
-        return jsonify(payload), 201
+        id_usuario_int = int(id_usuario)
+    except (ValueError, TypeError):
+        return jsonify({"error": "id_usuario debe ser un entero"}), 400
+
+    if not usuario_model.obtener_por_id(id_usuario_int):
+        return jsonify({"error": "Usuario no encontrado"}), 404
+
+    metodo_origen = (data.get("metodo_origen") or "video_galeria").strip().lower()
+    if metodo_origen not in {"ia_vivo", "video_galeria"}:
+        metodo_origen = "video_galeria"
+
+    try:
+        payload = modelo.guardar_golpeo(id_usuario_int, data, metodo_origen=metodo_origen)
+        return jsonify(_serializar(payload)), 201
+    except IntegrityError:
+        return jsonify({"error": "Error de integridad en la base de datos"}), 409
     except Exception:
         return jsonify({"error": "No se pudo guardar el golpeo"}), 500
 
@@ -30,6 +83,91 @@ def guardar_golpeo():
 def obtener_golpeos(id_usuario: int):
     try:
         golpes = modelo.obtener_por_usuario(id_usuario)
-        return jsonify(golpes), 200
+        return jsonify([_serializar(g) for g in golpes]), 200
     except Exception:
         return jsonify({"error": "No se pudieron cargar los golpes"}), 500
+
+
+@futbol_db_bp.route("/api/golpeos", methods=["GET"])
+def listar():
+    rows = modelo.obtener_todos()
+    return jsonify([_serializar(r) for r in rows])
+
+
+@futbol_db_bp.route("/api/golpeos/<int:id_golpeo>", methods=["GET"])
+def obtener(id_golpeo: int):
+    row = modelo.obtener_por_id(id_golpeo)
+    if not row:
+        return jsonify({"error": "Golpeo no encontrado"}), 404
+    return jsonify(_serializar(row))
+
+
+@futbol_db_bp.route("/api/golpeos/<int:id_golpeo>", methods=["DELETE"])
+def eliminar(id_golpeo: int):
+    ok = modelo.eliminar(id_golpeo)
+    if not ok:
+        return jsonify({"error": "Golpeo no encontrado"}), 404
+    return jsonify({"mensaje": "Golpeo eliminado"})
+
+
+@futbol_db_bp.route("/api/videos", methods=["GET"])
+def listar_videos_guardados():
+    id_usuario = request.args.get("id_usuario")
+
+    id_usuario_int = None
+    if id_usuario:
+        try:
+            id_usuario_int = int(id_usuario)
+        except ValueError:
+            return jsonify({"error": "id_usuario debe ser un entero"}), 400
+
+        if not usuario_model.obtener_por_id(id_usuario_int):
+            return jsonify({"error": "Usuario no encontrado"}), 404
+
+    videos = modelo.obtener_videos_guardados(id_usuario=id_usuario_int)
+    clasificados = clasificar_videos(videos)
+
+    return jsonify({
+        "filtro": {
+            "id_usuario": id_usuario_int,
+        },
+        "totales": {
+            "videos": len(videos),
+            "individuales": len(clasificados["individuales"]),
+            "comparativas": len(clasificados["comparativas"]),
+        },
+        **clasificados,
+    })
+
+
+@futbol_db_bp.route("/api/videos/<int:id_golpeo>/stream", methods=["GET"])
+def stream_video_guardado(id_golpeo: int):
+    row = modelo.obtener_video_por_id_golpeo(id_golpeo)
+    if not row:
+        return jsonify({"error": "Video no encontrado"}), 404
+
+    video_bytes = row.get("video_blob")
+    if not video_bytes:
+        return jsonify({"error": "El golpeo no tiene video almacenado"}), 404
+
+    mime = row.get("video_mime") or "video/mp4"
+    nombre = row.get("video_nombre") or f"golpeo_{id_golpeo}.mp4"
+
+    total = len(video_bytes)
+    range_header = request.headers.get("Range", "")
+    parsed = _parse_range_header(range_header, total)
+
+    headers = {
+        "Accept-Ranges": "bytes",
+        "Content-Disposition": f'inline; filename="{nombre}"',
+    }
+
+    if parsed is None:
+        headers["Content-Length"] = str(total)
+        return Response(video_bytes, status=200, mimetype=mime, headers=headers)
+
+    start, end = parsed
+    chunk = video_bytes[start:end + 1]
+    headers["Content-Range"] = f"bytes {start}-{end}/{total}"
+    headers["Content-Length"] = str(len(chunk))
+    return Response(chunk, status=206, mimetype=mime, headers=headers)

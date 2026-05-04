@@ -10,9 +10,11 @@ Guía paso a paso para usar la aplicación web de medición física.
 2. [Arrancar la aplicación](#2-arrancar-la-aplicación)
 3. [Pantalla principal (Landing)](#3-pantalla-principal)
 4. [Módulo Cámara / Salto](#4-módulo-cámara--salto)
-5. [Módulo Sensor Arduino](#5-módulo-sensor-arduino)
-6. [Acceso desde el móvil](#6-acceso-desde-el-móvil)
-7. [Solución de problemas](#7-solución-de-problemas)
+5. [Módulo Cámara / Futbol](#5-módulo-cámara--futbol)
+6. [Módulo Sensor Arduino](#6-módulo-sensor-arduino)
+7. [Acceso desde el móvil](#7-acceso-desde-el-móvil)
+8. [Solución de problemas](#8-solución-de-problemas)
+9. [API REST — Usuarios, Saltos y Comparativa](#9-api-rest--usuarios-saltos-y-comparativa)
 
 ---
 
@@ -204,7 +206,55 @@ Pulsar **"Nuevo Salto"** para volver a la vista de cámara y hacer otro intento.
 
 ---
 
-## 5. Módulo Sensor Arduino
+## 5. Módulo Cámara / Futbol
+
+### ¿Qué hace?
+
+Analiza un video del golpeo de balon y calcula angulos articulares y estabilidad del tronco.
+
+### Paso a paso
+
+#### 1. Seleccionar o crear usuario
+
+- Usa la tabla de usuarios para seleccionar un perfil.
+- Puedes crear, editar o eliminar usuarios desde el formulario lateral.
+- Si hay usuario activo, el golpeo se guarda en BD.
+
+#### 2. Grabar o subir el video
+
+**Opcion A — Grabar con la camara:**
+
+1. Acepta permisos de camara.
+2. Pulsa **"Iniciar grabacion"**.
+3. Realiza el golpeo.
+4. Pulsa de nuevo para detener.
+
+**Opcion B — Subir video existente:**
+
+1. Pulsa **"Subir video de la galeria"**.
+2. Selecciona un archivo (.mp4, .webm, .mov, .avi).
+
+#### 3. Guardar datos y video
+
+- En **"Guardar video en BD?"** puedes elegir:
+   - **Si**: guarda datos + video en MySQL.
+   - **No**: guarda solo los datos extraidos.
+
+#### 4. Ver resultados
+
+El panel muestra:
+
+- Pierna de apoyo y pierna de golpeo.
+- Angulos de cadera, rodilla y tobillo.
+- Estabilidad del tronco y confianza.
+
+#### 5. Biblioteca de videos
+
+- El boton **"Abrir biblioteca de videos"** muestra los videos guardados.
+
+---
+
+## 6. Módulo Sensor Arduino
 
 ### ¿Qué hace?
 
@@ -238,7 +288,7 @@ Pulsar **"Detener"** para dejar de consultar al sensor.
 
 ---
 
-## 6. Acceso desde el móvil
+## 7. Acceso desde el móvil
 
 Si quieres grabar un salto con la cámara del móvil:
 
@@ -257,13 +307,13 @@ Si quieres grabar un salto con la cámara del móvil:
 
 ---
 
-## 7. Solución de problemas
+## 8. Solución de problemas
 
 | Problema | Causa probable | Solución |
 |----------|---------------|----------|
 | "Error al conectar con localhost:5001" | Backend de salto no está arrancado | Ejecutar `python app.py` en `modules/salto/backend` |
 | "Error al conectar con localhost:5000" | Backend del sensor no está arrancado | Ejecutar `python app.py` en `modules/sensor/backend` |
-| La cámara no se activa | No se dieron permisos / no hay HTTPS | Aceptar permisos del navegador. Desde móvil, ver sección 6 |
+| La camara no se activa | No se dieron permisos / no hay HTTPS | Aceptar permisos del navegador. Desde movil, ver seccion 7 |
 | "Introduce una altura válida" | Campo de altura vacío o con valor ≤ 0 | Escribir la estatura en metros (ej: 1.75) |
 | "Extensión no permitida" | Formato de vídeo no soportado | Usar .mp4, .webm, .avi o .mov |
 | Badge rojo en sensor | Arduino no conectado o backend caído | Verificar USB + que el backend esté corriendo |
@@ -271,11 +321,11 @@ Si quieres grabar un salto con la cámara del móvil:
 
 ---
 
-## 8. API REST — Usuarios, Saltos y Comparativa
+## 9. API REST — Usuarios, Saltos y Comparativa
 
 El backend del módulo salto (puerto 5001) expone, además del endpoint de cálculo, una API CRUD completa para gestionar usuarios y saltos en base de datos MySQL.
 
-### 8.1 Usuarios
+### 9.1 Usuarios
 
 | Método | Ruta | Descripción |
 |--------|------|-------------|
@@ -285,7 +335,7 @@ El backend del módulo salto (puerto 5001) expone, además del endpoint de cálc
 | `PUT` | `/api/usuarios/<id>` | Actualiza un usuario (JSON: mismos campos) |
 | `DELETE` | `/api/usuarios/<id>` | Elimina un usuario y todos sus saltos (CASCADE) |
 
-### 8.2 Saltos
+### 9.2 Saltos
 
 | Método | Ruta | Descripción |
 |--------|------|-------------|
@@ -296,14 +346,14 @@ El backend del módulo salto (puerto 5001) expone, además del endpoint de cálc
 | `DELETE` | `/api/saltos/<id>` | Elimina un salto |
 | `GET` | `/api/usuarios/<id>/saltos` | Lista los saltos de un usuario |
 
-### 8.3 Progreso y comparativa
+### 9.3 Progreso y comparativa
 
 | Método | Ruta | Descripción |
 |--------|------|-------------|
 | `GET` | `/api/usuarios/<id>/progreso` | Cuántos saltos tiene y cuántos le faltan (mín. 4+4) |
 | `GET` | `/api/usuarios/<id>/comparativa` | Estadísticas por tipo (mejor, peor, media, último, evolución). Devuelve 403 si no cumple el mínimo |
 
-### 8.4 Guardado automático desde el cálculo
+### 9.4 Guardado automatico desde el calculo
 
 El endpoint `POST /api/salto/calcular` acepta opcionalmente:
 
@@ -316,7 +366,7 @@ El endpoint `POST /api/salto/calcular` acepta opcionalmente:
 
 La respuesta incluirá `id_salto` si el guardado fue exitoso.
 
-### 8.5 Base de datos
+### 9.5 Base de datos
 
 MySQL con base de datos `bd_anim3d_saltos`. Dos tablas:
 
@@ -325,7 +375,7 @@ MySQL con base de datos `bd_anim3d_saltos`. Dos tablas:
 
 La conexión se configura en `modules/salto/backend/config.py` (`DB_CONFIG`).
 
-### 8.6 Analítica avanzada
+### 9.6 Analitica avanzada
 
 | Método | Ruta | Descripción |
 |--------|------|-------------|
@@ -334,7 +384,7 @@ La conexión se configura en `modules/salto/backend/config.py` (`DB_CONFIG`).
 
 Ambos endpoints aceptan `?tipo=vertical` o `?tipo=horizontal` (por defecto: `vertical`).
 
-### 8.7 Vídeo anotado
+### 9.7 Video anotado
 
 | Método | Ruta | Descripción |
 |--------|------|-------------|
@@ -349,3 +399,48 @@ Ambos endpoints aceptan `?tipo=vertical` o `?tipo=horizontal` (por defecto: `ver
 | `altura_real_m` | float | Siempre | Altura real del usuario en metros |
 
 **Respuesta:** descarga directa del vídeo anotado como `.mp4`.
+
+---
+
+### 9.8 Futbol — usuarios, golpeos y videos
+
+El backend del modulo futbol (puerto 5002) expone endpoints equivalentes para usuarios y guardado de golpeos.
+
+#### Usuarios
+
+| Metodo | Ruta | Descripcion |
+|--------|------|-------------|
+| `GET` | `/api/usuarios` | Lista usuarios (soporta `paginado=1`) |
+| `POST` | `/api/usuarios` | Crea usuario (`alias`, `nombre_completo`, `altura_m`, `peso_kg` opcional) |
+| `GET` | `/api/usuarios/<id>` | Obtiene usuario |
+| `PUT` | `/api/usuarios/<id>` | Actualiza usuario |
+| `DELETE` | `/api/usuarios/<id>` | Elimina usuario y sus golpeos (CASCADE) |
+| `GET` | `/api/usuarios/<id>/golpeos` | Lista golpeos del usuario |
+
+#### Golpeos
+
+| Metodo | Ruta | Descripcion |
+|--------|------|-------------|
+| `POST` | `/api/futbol/analizar` | Analiza video y opcionalmente guarda en BD |
+| `GET` | `/api/golpeos` | Lista golpeos guardados |
+| `GET` | `/api/golpeos/<id>` | Obtiene un golpeo |
+| `DELETE` | `/api/golpeos/<id>` | Elimina un golpeo |
+
+#### Videos
+
+| Metodo | Ruta | Descripcion |
+|--------|------|-------------|
+| `GET` | `/api/videos` | Biblioteca de videos guardados (filtro `id_usuario`) |
+| `GET` | `/api/videos/<id>/stream` | Streaming del video guardado |
+
+#### Guardado automatico desde el analisis
+
+El endpoint `POST /api/futbol/analizar` acepta:
+
+| Campo | Tipo | Descripcion |
+|-------|------|-------------|
+| `id_usuario` | int | Si se envia, el resultado se guarda automaticamente |
+| `guardar_bd` | bool | Fuerza el guardado del golpeo en BD |
+| `guardar_video_bd` | bool | Si es `true`, guarda el video en BD |
+| `metodo_origen` | string | `ia_vivo` o `video_galeria` |
+| `incluir_landmarks` | bool | Si es `true`, incluye landmarks en la respuesta |

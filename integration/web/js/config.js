@@ -18,6 +18,9 @@ function getCurrentProtocol() {
     if (proto === 'https:') {
         return 'https';
     }
+    if (proto === 'file:') {
+        return 'https';
+    }
     return 'http';
 }
 

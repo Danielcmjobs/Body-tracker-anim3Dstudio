@@ -47,7 +47,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 indicador.classList.add('ia-lista');
             }
         } catch (_e) {
-            mostrarToast('No se pudo acceder a la camara.', 'error');
+            mostrarToast('No se pudo acceder a la camara. Verifica permisos y abre la pagina en https/localhost.', 'error');
         }
     }
 
@@ -61,6 +61,19 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     // Arranca la grabacion con MediaRecorder.
+    function getUsuarioActivo() {
+        const idUsuario = sessionStorage.getItem('idUser');
+        if (!idUsuario) {
+            return null;
+        }
+        return { idUsuario: Number(idUsuario) };
+    }
+
+    function getPreferenciaGuardarVideo() {
+        const opcion = document.querySelector('input[name="guardar-video-tiempo-real"]:checked');
+        return opcion ? opcion.value : 'no';
+    }
+
     async function iniciarGrabacion() {
         if (typeof MediaRecorder === 'undefined') {
             mostrarToast('La grabacion no esta soportada en este navegador.', 'error');
@@ -87,7 +100,7 @@ document.addEventListener('DOMContentLoaded', () => {
         // Procesa el video una vez finaliza la grabacion.
         mediaRecorder.onstop = async () => {
             const videoBlob = new Blob(chunks, { type: 'video/webm' });
-            await procesarVideo(videoBlob);
+            await procesarVideo(videoBlob, 'ia_vivo');
         };
         mediaRecorder.start();
         grabando = true;
@@ -106,10 +119,23 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     // Envia el video al backend y muestra los resultados.
-    async function procesarVideo(videoBlob) {
+    async function procesarVideo(videoBlob, metodoOrigen = 'video_galeria') {
         mostrarToast('Procesando video...', 'info');
         try {
-            const resultado = await analizarGolpeo(videoBlob);
+            const usuario = getUsuarioActivo();
+            const guardarVideo = getPreferenciaGuardarVideo() === 'si';
+            const guardarBd = Boolean(usuario);
+
+            if (!usuario && guardarVideo) {
+                mostrarToast('Selecciona un usuario para guardar el video.', 'warn');
+            }
+
+            const resultado = await analizarGolpeo(videoBlob, {
+                idUsuario: usuario ? usuario.idUsuario : null,
+                guardarBd: guardarBd,
+                guardarVideoBd: guardarVideo && guardarBd,
+                metodoOrigen: metodoOrigen
+            });
             pintarResultados(resultado);
             mostrarToast('Analisis completado', 'success');
         } catch (error) {
@@ -174,7 +200,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 labelVisual.textContent = 'Enviando al servidor...';
                 labelVisual.classList.add('uploading');
             }
-            await procesarVideo(archivo);
+            await procesarVideo(archivo, 'video_galeria');
             if (labelVisual) {
                 labelVisual.textContent = 'Subir video de la galeria';
                 labelVisual.classList.remove('uploading');

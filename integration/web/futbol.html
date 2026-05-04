@@ -21,6 +21,11 @@
     </main>
 
     <section class="capture-strip">
+        <div class="record-choice">
+            <span class="choice-label">Guardar video en BD?</span>
+            <label><input type="radio" name="guardar-video-tiempo-real" value="si"> Si, guardar video + datos</label>
+            <label><input type="radio" name="guardar-video-tiempo-real" value="no" checked> No, solo guardar datos</label>
+        </div>
         <button id="btn-grabar" class="record-btn primary-capture-btn">
             <span class="record-icon"></span>
             <span id="btn-text">Iniciar grabacion</span>
@@ -35,44 +40,85 @@
         </div>
 
         <div class="user-panel">
-            <h2 class="panel-title">Resultados del golpeo</h2>
-            <p class="sensor-nota">Graba o sube un video para obtener las metricas.</p>
+            <h2 class="panel-title">Registro del golpeo</h2>
+            <p class="sensor-nota">Selecciona o crea un usuario para guardar los resultados.</p>
 
-            <div class="technical-data-grid" id="futbol-metricas">
-                <div class="data-box">
-                    <span class="data-label">Pierna apoyo</span>
-                    <span id="data-pierna-apoyo" class="data-value">--</span>
+            <input type="text" id="buscar-usuario" class="modern-input" placeholder="Buscar usuario...">
+
+            <div class="tabla-usuarios-wrapper" id="tabla-usuarios-wrapper">
+                <table class="tabla-usuarios">
+                    <thead>
+                        <tr>
+                            <th>Usuario</th>
+                        </tr>
+                    </thead>
+                    <tbody id="tabla-usuarios-body"></tbody>
+                </table>
+                <div id="usuarios-loading" class="sensor-nota">Cargando usuarios...</div>
+                <div id="usuarios-empty" class="sensor-nota" style="display: none;">No hay usuarios para mostrar.</div>
+            </div>
+
+            <div class="crud-action-row">
+                <button id="btn-refrescar-usuarios" class="sensor-btn secondary-btn" type="button">Actualizar lista</button>
+                <div class="crud-secondary-row">
+                    <button id="btn-editar-usuario" class="sensor-btn secondary-btn" type="button">Editar</button>
+                    <button id="btn-eliminar-usuario" class="sensor-btn danger-btn" type="button">Eliminar</button>
                 </div>
-                <div class="data-box">
-                    <span class="data-label">Pierna golpeo</span>
-                    <span id="data-pierna-golpeo" class="data-value">--</span>
-                </div>
-                <div class="data-box">
-                    <span class="data-label">Ang. Cadera</span>
-                    <span id="data-angulo-cadera" class="data-value">-- deg</span>
-                </div>
-                <div class="data-box">
-                    <span class="data-label">Ang. Rodilla</span>
-                    <span id="data-angulo-rodilla" class="data-value">-- deg</span>
-                </div>
-                <div class="data-box">
-                    <span class="data-label">Ang. Tobillo</span>
-                    <span id="data-angulo-tobillo" class="data-value">-- deg</span>
-                </div>
-                <div class="data-box">
-                    <span class="data-label">Estabilidad</span>
-                    <span id="data-estabilidad" class="data-value">--</span>
-                </div>
-                <div class="data-box">
-                    <span class="data-label">Confianza</span>
-                    <span id="data-confianza" class="data-value">--</span>
-                </div>
+            </div>
+
+            <div class="user-form-grid">
+                <input type="text" id="form-alias" class="modern-input" placeholder="Alias" required>
+                <input type="text" id="form-nombre" class="modern-input" placeholder="Nombre" required>
+            </div>
+            <p class="sensor-nota">Usa un alias corto y un nombre identificable para el listado.</p>
+            <div class="form-actions">
+                <button id="btn-guardar-usuario" class="btn-accion">Guardar usuario</button>
+                <button id="btn-cancelar-edicion" class="btn-accion btn-secondary" style="display: none;">Cancelar</button>
+            </div>
+        </div>
+
+        <div id="usuario-estado" class="sensor-nota">Sin usuario activo.</div>
+        <a href="futbol_videos.html" class="sensor-btn secondary-btn biblioteca-link">Abrir biblioteca de videos</a>
+
+        <h2 class="panel-title">Resultados del golpeo</h2>
+        <p class="sensor-nota">Graba o sube un video para obtener las metricas.</p>
+
+        <div class="technical-data-grid" id="futbol-metricas">
+            <div class="data-box">
+                <span class="data-label">Pierna apoyo</span>
+                <span id="data-pierna-apoyo" class="data-value">--</span>
+            </div>
+            <div class="data-box">
+                <span class="data-label">Pierna golpeo</span>
+                <span id="data-pierna-golpeo" class="data-value">--</span>
+            </div>
+            <div class="data-box">
+                <span class="data-label">Ang. Cadera</span>
+                <span id="data-angulo-cadera" class="data-value">-- deg</span>
+            </div>
+            <div class="data-box">
+                <span class="data-label">Ang. Rodilla</span>
+                <span id="data-angulo-rodilla" class="data-value">-- deg</span>
+            </div>
+            <div class="data-box">
+                <span class="data-label">Ang. Tobillo</span>
+                <span id="data-angulo-tobillo" class="data-value">-- deg</span>
+            </div>
+            <div class="data-box">
+                <span class="data-label">Estabilidad</span>
+                <span id="data-estabilidad" class="data-value">--</span>
+            </div>
+            <div class="data-box">
+                <span class="data-label">Confianza</span>
+                <span id="data-confianza" class="data-value">--</span>
             </div>
         </div>
     </section>
 
     <script src="js/config.js"></script>
+    <script src="js/api-client.js"></script>
     <script src="js/api_futbol.js"></script>
+    <script src="js/registro_futbol.js"></script>
     <script src="js/futbol.js"></script>
 </body>
 </html>
