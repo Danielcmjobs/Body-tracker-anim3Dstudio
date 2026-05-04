@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Analizador de golpeo</title>
+    <link rel="stylesheet" href="css/style.css?v=20260409b">
+</head>
+<body class="salto-page futbol-page">
+    <div id="toast-aviso" class="toast-aviso" aria-live="polite"></div>
+
+    <header class="top-bar">
+        <a href="index.html" class="back-button"><span class="arrow">←</span> Volver</a>
+        <h1 class="header-title">Analizador de golpeo</h1>
+    </header>
+
+    <main class="camera-wrapper">
+        <div id="indicador-ia">Cargando Motor...</div>
+        <video id="vista-camara" autoplay playsinline muted></video>
+        <canvas id="canvas-esqueleto"></canvas>
+    </main>
+
+    <section class="capture-strip">
+        <button id="btn-grabar" class="record-btn primary-capture-btn">
+            <span class="record-icon"></span>
+            <span id="btn-text">Iniciar grabacion</span>
+        </button>
+    </section>
+
+    <section class="camera-hud">
+        <div class="upload-container upload-separator-only">
+            <span class="divider">o</span>
+            <div class="upload-btn-visual" id="label-visual">Subir video de la galeria</div>
+            <input type="file" id="input-archivo-final" accept="video/mp4,video/webm,video/quicktime,video/*" class="input-transparente">
+        </div>
+
+        <div class="user-panel">
+            <h2 class="panel-title">Resultados del golpeo</h2>
+            <p class="sensor-nota">Graba o sube un video para obtener las metricas.</p>
+
+            <div class="technical-data-grid" id="futbol-metricas">
+                <div class="data-box">
+                    <span class="data-label">Pierna apoyo</span>
+                    <span id="data-pierna-apoyo" class="data-value">--</span>
+                </div>
+                <div class="data-box">
+                    <span class="data-label">Pierna golpeo</span>
+                    <span id="data-pierna-golpeo" class="data-value">--</span>
+                </div>
+                <div class="data-box">
+                    <span class="data-label">Ang. Cadera</span>
+                    <span id="data-angulo-cadera" class="data-value">-- deg</span>
+                </div>
+                <div class="data-box">
+                    <span class="data-label">Ang. Rodilla</span>
+                    <span id="data-angulo-rodilla" class="data-value">-- deg</span>
+                </div>
+                <div class="data-box">
+                    <span class="data-label">Ang. Tobillo</span>
+                    <span id="data-angulo-tobillo" class="data-value">-- deg</span>
+                </div>
+                <div class="data-box">
+                    <span class="data-label">Estabilidad</span>
+                    <span id="data-estabilidad" class="data-value">--</span>
+                </div>
+                <div class="data-box">
+                    <span class="data-label">Confianza</span>
+                    <span id="data-confianza" class="data-value">--</span>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <script src="js/config.js"></script>
+    <script src="js/api_futbol.js"></script>
+    <script src="js/futbol.js"></script>
+</body>
+</html>

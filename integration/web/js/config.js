@@ -6,6 +6,7 @@
 
 const BACKEND_SALTO_PORT = 5001;
 const BACKEND_SENSOR_PORT = 5000;
+const BACKEND_FUTBOL_PORT = 5002;
 
 function getCurrentHost() {
     const host = (window.location.hostname || '').trim();
@@ -26,4 +27,8 @@ function getBackendBaseUrl() {
 
 function getSensorBaseUrl() {
     return `${getCurrentProtocol()}://${getCurrentHost()}:${BACKEND_SENSOR_PORT}`;
+}
+
+function getFutbolBaseUrl() {
+    return `${getCurrentProtocol()}://${getCurrentHost()}:${BACKEND_FUTBOL_PORT}`;
 }

@@ -115,6 +115,14 @@ body {
     transition-delay: 0.15s;
 }
 
+#card-futbol {
+    transition-delay: 0.1s;
+}
+
+#card-videos {
+    transition-delay: 0.2s;
+}
+
 /* --- VISTA DE CÁMARA REDISEÑADA (salto.html) --- */
 
 .salto-page {
