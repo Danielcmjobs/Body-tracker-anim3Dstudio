@@ -112,10 +112,92 @@
                 <span class="data-label">Confianza</span>
                 <span id="data-confianza" class="data-value">--</span>
             </div>
+            <div class="data-box">
+                <span class="data-label">Vel. pie (m/s)</span>
+                <span id="data-velocidad-pie" class="data-value">--</span>
+            </div>
+            <div class="data-box">
+                <span class="data-label">Frame impacto</span>
+                <span id="data-frame-impacto" class="data-value">--</span>
+            </div>
+            <div class="data-box">
+                <span class="data-label">Asimetría (%)</span>
+                <span id="data-asimetria" class="data-value">--</span>
+            </div>
+            <div class="data-box">
+                <span class="data-label">Apoyo (score)</span>
+                <span id="data-apoyo-score" class="data-value">--</span>
+            </div>
+            <div class="data-box">
+                <span class="data-label">Clasificación</span>
+                <span id="data-clasificacion" class="data-value">--</span>
+            </div>
+        </div>
+
+        <div id="panel-fases" class="panel-fases" style="display:none;">
+            <h3 class="panel-title">Fases del gesto</h3>
+            <ul id="lista-fases" class="lista-fases"></ul>
+        </div>
+
+        <div id="panel-alertas" class="panel-alertas" style="display:none;">
+            <h3 class="panel-title">Alertas y observaciones</h3>
+            <ul id="lista-alertas" class="lista-alertas"></ul>
+            <ul id="lista-observaciones" class="lista-observaciones"></ul>
+        </div>
+
+        <div id="panel-curvas" class="panel-curvas" style="display:none;">
+            <h3 class="panel-title">Curvas angulares (cadera / rodilla / tobillo)</h3>
+            <canvas id="grafico-curvas" height="220"></canvas>
+        </div>
+
+        <div id="panel-velocidades" class="panel-curvas" style="display:none;">
+            <h3 class="panel-title">Velocidades articulares (°/s)</h3>
+            <canvas id="grafico-velocidades" height="220"></canvas>
+        </div>
+
+        <div id="panel-analitica" class="panel-analitica" style="display:none;">
+            <h3 class="panel-title">Analítica del jugador</h3>
+            <div class="data-box-row">
+                <div class="data-box">
+                    <span class="data-label">Fatiga sesión</span>
+                    <span id="data-fatiga" class="data-value">--</span>
+                </div>
+                <div class="data-box">
+                    <span class="data-label">Tendencia</span>
+                    <span id="data-tendencia" class="data-value">--</span>
+                </div>
+            </div>
+            <canvas id="grafico-tendencia" height="200"></canvas>
+            <h4 class="panel-subtitle">Comparativa últimas 4 patadas</h4>
+            <div class="comparativa-wrapper">
+                <table class="tabla-comparativa">
+                    <thead>
+                        <tr>
+                            <th>#</th>
+                            <th>Fecha</th>
+                            <th>Vel. (m/s)</th>
+                            <th>Cadera</th>
+                            <th>Rodilla</th>
+                            <th>Tobillo</th>
+                            <th>Estab.</th>
+                            <th>Clasif.</th>
+                        </tr>
+                    </thead>
+                    <tbody id="tbody-comparativa"></tbody>
+                </table>
+            </div>
+        </div>
+
+        <div id="panel-acciones" class="panel-acciones" style="display:none;">
+            <button id="btn-video-anotado" class="sensor-btn primary-btn" type="button">
+                Generar vídeo anotado
+            </button>
+            <video id="video-anotado-player" controls style="display:none; width:100%; margin-top:12px;"></video>
         </div>
     </section>
 
     <script src="js/config.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
     <script src="js/api-client.js"></script>
     <script src="js/api_futbol.js"></script>
     <script src="js/registro_futbol.js"></script>

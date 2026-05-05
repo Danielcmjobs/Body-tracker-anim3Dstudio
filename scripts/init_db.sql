@@ -248,3 +248,152 @@ SET @sql = IF(@col_exists = 0,
 PREPARE stmt FROM @sql;
 EXECUTE stmt;
 DEALLOCATE PREPARE stmt;
+
+-- ── Migraciones: columnas avanzadas de golpes_futbol (analitica nivel salto) ──
+
+SET @col_exists = (
+    SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
+    WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'golpes_futbol' AND COLUMN_NAME = 'velocidad_pie_ms'
+);
+SET @sql = IF(@col_exists = 0,
+    'ALTER TABLE golpes_futbol ADD COLUMN velocidad_pie_ms DECIMAL(6,2) NULL AFTER estabilidad_tronco',
+    'SELECT 1'
+);
+PREPARE stmt FROM @sql;
+EXECUTE stmt;
+DEALLOCATE PREPARE stmt;
+
+SET @col_exists = (
+    SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
+    WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'golpes_futbol' AND COLUMN_NAME = 'frame_impacto'
+);
+SET @sql = IF(@col_exists = 0,
+    'ALTER TABLE golpes_futbol ADD COLUMN frame_impacto INT NULL AFTER velocidad_pie_ms',
+    'SELECT 1'
+);
+PREPARE stmt FROM @sql;
+EXECUTE stmt;
+DEALLOCATE PREPARE stmt;
+
+SET @col_exists = (
+    SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
+    WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'golpes_futbol' AND COLUMN_NAME = 'curvas_json'
+);
+SET @sql = IF(@col_exists = 0,
+    'ALTER TABLE golpes_futbol ADD COLUMN curvas_json JSON NULL AFTER frame_impacto',
+    'SELECT 1'
+);
+PREPARE stmt FROM @sql;
+EXECUTE stmt;
+DEALLOCATE PREPARE stmt;
+
+SET @col_exists = (
+    SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
+    WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'golpes_futbol' AND COLUMN_NAME = 'landmarks_json'
+);
+SET @sql = IF(@col_exists = 0,
+    'ALTER TABLE golpes_futbol ADD COLUMN landmarks_json JSON NULL AFTER curvas_json',
+    'SELECT 1'
+);
+PREPARE stmt FROM @sql;
+EXECUTE stmt;
+DEALLOCATE PREPARE stmt;
+
+SET @col_exists = (
+    SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
+    WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'golpes_futbol' AND COLUMN_NAME = 'alertas_json'
+);
+SET @sql = IF(@col_exists = 0,
+    'ALTER TABLE golpes_futbol ADD COLUMN alertas_json JSON NULL AFTER landmarks_json',
+    'SELECT 1'
+);
+PREPARE stmt FROM @sql;
+EXECUTE stmt;
+DEALLOCATE PREPARE stmt;
+
+SET @col_exists = (
+    SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
+    WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'golpes_futbol' AND COLUMN_NAME = 'clasificacion'
+);
+SET @sql = IF(@col_exists = 0,
+    'ALTER TABLE golpes_futbol ADD COLUMN clasificacion VARCHAR(50) NULL AFTER alertas_json',
+    'SELECT 1'
+);
+PREPARE stmt FROM @sql;
+EXECUTE stmt;
+DEALLOCATE PREPARE stmt;
+
+
+-- ── Migraciones: columnas avanzadas de golpes_futbol (analítica nivel salto) ──
+
+SET @col_exists = (
+    SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
+    WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'golpes_futbol' AND COLUMN_NAME = 'velocidad_pie_ms'
+);
+SET @sql = IF(@col_exists = 0,
+    'ALTER TABLE golpes_futbol ADD COLUMN velocidad_pie_ms DECIMAL(6,2) NULL AFTER estabilidad_tronco',
+    'SELECT 1'
+);
+PREPARE stmt FROM @sql;
+EXECUTE stmt;
+DEALLOCATE PREPARE stmt;
+
+SET @col_exists = (
+    SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
+    WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'golpes_futbol' AND COLUMN_NAME = 'frame_impacto'
+);
+SET @sql = IF(@col_exists = 0,
+    'ALTER TABLE golpes_futbol ADD COLUMN frame_impacto INT NULL AFTER velocidad_pie_ms',
+    'SELECT 1'
+);
+PREPARE stmt FROM @sql;
+EXECUTE stmt;
+DEALLOCATE PREPARE stmt;
+
+SET @col_exists = (
+    SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
+    WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'golpes_futbol' AND COLUMN_NAME = 'curvas_json'
+);
+SET @sql = IF(@col_exists = 0,
+    'ALTER TABLE golpes_futbol ADD COLUMN curvas_json JSON NULL AFTER frame_impacto',
+    'SELECT 1'
+);
+PREPARE stmt FROM @sql;
+EXECUTE stmt;
+DEALLOCATE PREPARE stmt;
+
+SET @col_exists = (
+    SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
+    WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'golpes_futbol' AND COLUMN_NAME = 'landmarks_json'
+);
+SET @sql = IF(@col_exists = 0,
+    'ALTER TABLE golpes_futbol ADD COLUMN landmarks_json JSON NULL AFTER curvas_json',
+    'SELECT 1'
+);
+PREPARE stmt FROM @sql;
+EXECUTE stmt;
+DEALLOCATE PREPARE stmt;
+
+SET @col_exists = (
+    SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
+    WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'golpes_futbol' AND COLUMN_NAME = 'alertas_json'
+);
+SET @sql = IF(@col_exists = 0,
+    'ALTER TABLE golpes_futbol ADD COLUMN alertas_json JSON NULL AFTER landmarks_json',
+    'SELECT 1'
+);
+PREPARE stmt FROM @sql;
+EXECUTE stmt;
+DEALLOCATE PREPARE stmt;
+
+SET @col_exists = (
+    SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
+    WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'golpes_futbol' AND COLUMN_NAME = 'clasificacion'
+);
+SET @sql = IF(@col_exists = 0,
+    'ALTER TABLE golpes_futbol ADD COLUMN clasificacion VARCHAR(50) NULL AFTER alertas_json',
+    'SELECT 1'
+);
+PREPARE stmt FROM @sql;
+EXECUTE stmt;
+DEALLOCATE PREPARE stmt;

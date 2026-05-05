@@ -144,3 +144,62 @@ async function obtenerUsuariosFutbolPaginados({ search = '', limit = 20, offset 
         has_more: Boolean(payload.has_more),
     };
 }
+
+// ── Endpoints avanzados (analítica del módulo futbol) ──
+
+async function obtenerCurvasGolpeo(idGolpeo) {
+    const url = `${getFutbolBaseUrl()}/api/golpeos/${idGolpeo}/curvas`;
+    return fetchJsonFutbol(url);
+}
+
+async function obtenerLandmarksGolpeo(idGolpeo) {
+    const url = `${getFutbolBaseUrl()}/api/golpeos/${idGolpeo}/landmarks`;
+    return fetchJsonFutbol(url);
+}
+
+async function obtenerAlertasGolpeo(idGolpeo) {
+    const url = `${getFutbolBaseUrl()}/api/golpeos/${idGolpeo}/alertas`;
+    return fetchJsonFutbol(url);
+}
+
+async function obtenerFatigaUsuarioFutbol(idUsuario, metrica = 'velocidad_pie_ms') {
+    const q = new URLSearchParams({ metrica });
+    const url = `${getFutbolBaseUrl()}/api/usuarios_futbol/${idUsuario}/fatiga?${q.toString()}`;
+    return fetchJsonFutbol(url);
+}
+
+async function obtenerTendenciaUsuarioFutbol(idUsuario, metrica = 'velocidad_pie_ms', semanas = 4) {
+    const q = new URLSearchParams({ metrica, semanas: String(semanas) });
+    const url = `${getFutbolBaseUrl()}/api/usuarios_futbol/${idUsuario}/tendencia?${q.toString()}`;
+    return fetchJsonFutbol(url);
+}
+
+async function obtenerComparativaUsuarioFutbol(idUsuario, n = 4) {
+    const q = new URLSearchParams({ n: String(n) });
+    const url = `${getFutbolBaseUrl()}/api/usuarios_futbol/${idUsuario}/comparativa?${q.toString()}`;
+    return fetchJsonFutbol(url);
+}
+
+// Genera vídeo anotado y devuelve un Blob (mp4).
+async function generarVideoAnotadoFutbol(videoBlob, opciones = {}) {
+    const formData = new FormData();
+    formData.append('video', videoBlob, 'golpeo.webm');
+    if (opciones.frameImpacto != null) {
+        formData.append('frame_impacto', String(opciones.frameImpacto));
+    }
+    if (opciones.piernaGolpeo) {
+        formData.append('pierna_golpeo', String(opciones.piernaGolpeo));
+    }
+
+    const url = `${getFutbolBaseUrl()}/api/futbol/video-anotado`;
+    const respuesta = await fetch(url, { method: 'POST', body: formData });
+    if (!respuesta.ok) {
+        let mensaje = `Error HTTP ${respuesta.status}`;
+        try {
+            const data = await respuesta.json();
+            mensaje = data.error || data.mensaje || mensaje;
+        } catch (_e) { /* ignore */ }
+        throw new Error(mensaje);
+    }
+    return await respuesta.blob();
+}

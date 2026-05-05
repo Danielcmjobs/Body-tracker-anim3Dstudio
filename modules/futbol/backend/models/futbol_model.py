@@ -3,6 +3,7 @@ Modelo de persistencia para golpes de futbol.
 """
 
 from datetime import datetime
+import json
 import logging
 
 import mysql.connector
@@ -58,6 +59,9 @@ class FutbolModel:
         ]
         extras = [
             cls._expr_col(cur, alias, "golpes_futbol", "metodo_origen"),
+            cls._expr_col(cur, alias, "golpes_futbol", "velocidad_pie_ms"),
+            cls._expr_col(cur, alias, "golpes_futbol", "frame_impacto"),
+            cls._expr_col(cur, alias, "golpes_futbol", "clasificacion"),
         ]
         return ", ".join(base + extras)
 
@@ -71,6 +75,12 @@ class FutbolModel:
             "pierna_apoyo": data.get("pierna_apoyo") or "desconocida",
             "confianza": normalizar_float(data.get("confianza")),
             "metodo_origen": metodo_origen,
+            "velocidad_pie_ms": normalizar_float(data.get("velocidad_pie_ms")),
+            "frame_impacto": _safe_int(data.get("frame_impacto")),
+            "clasificacion": data.get("clasificacion"),
+            "curvas_json": data.get("curvas"),
+            "alertas_json": data.get("alertas"),
+            "landmarks_json": data.get("_landmarks_frames") or data.get("landmarks_frames"),
         }
 
         with get_connection() as (conn, cursor):
@@ -102,6 +112,28 @@ class FutbolModel:
                 columnas.append("metodo_origen")
                 valores.append(payload["metodo_origen"])
 
+            # Columnas avanzadas (Fase analítica)
+            for col, valor in [
+                ("velocidad_pie_ms", payload["velocidad_pie_ms"]),
+                ("frame_impacto", payload["frame_impacto"]),
+                ("clasificacion", payload["clasificacion"]),
+            ]:
+                if self._tiene_columna(cursor, "golpes_futbol", col):
+                    columnas.append(col)
+                    valores.append(valor)
+
+            for col, valor in [
+                ("curvas_json", payload["curvas_json"]),
+                ("alertas_json", payload["alertas_json"]),
+                ("landmarks_json", payload["landmarks_json"]),
+            ]:
+                if valor is not None and self._tiene_columna(cursor, "golpes_futbol", col):
+                    columnas.append(col)
+                    try:
+                        valores.append(json.dumps(valor, default=str))
+                    except (TypeError, ValueError):
+                        valores.append(None)
+
             cols_sql = ", ".join(columnas)
             placeholders = ", ".join(["%s"] * len(columnas))
 
@@ -111,7 +143,47 @@ class FutbolModel:
             )
             payload["id_golpeo"] = cursor.lastrowid
 
+        # No devolver landmarks_json al caller (puede ser muy grande)
+        payload.pop("landmarks_json", None)
         return payload
+
+    def _obtener_columna_json(self, id_golpeo: int, columna: str):
+        with get_connection() as (conn, cursor):
+            if not self._tiene_columna(cursor, "golpes_futbol", columna):
+                return None
+            cursor.execute(
+                f"SELECT {columna} FROM golpes_futbol WHERE id_golpeo = %s",
+                (id_golpeo,),
+            )
+            row = cursor.fetchone()
+            if not row:
+                return None
+            return _parse_json(row.get(columna))
+
+    def obtener_curvas(self, id_golpeo: int) -> dict | None:
+        return self._obtener_columna_json(id_golpeo, "curvas_json")
+
+    def obtener_landmarks(self, id_golpeo: int) -> list | None:
+        return self._obtener_columna_json(id_golpeo, "landmarks_json")
+
+    def obtener_alertas(self, id_golpeo: int) -> list | None:
+        return self._obtener_columna_json(id_golpeo, "alertas_json")
+
+    def _listar_por_usuario(self, id_usuario: int, orden: str = "DESC") -> list[dict]:
+        orden = "ASC" if str(orden).upper() == "ASC" else "DESC"
+        with get_connection() as (conn, cursor):
+            campos = self._campos_golpeos_select(cursor, alias="g")
+            order_col = "g.fecha_golpeo" if self._tiene_columna(cursor, "golpes_futbol", "fecha_golpeo") else "g.fecha"
+            cursor.execute(
+                f"SELECT {campos} FROM golpes_futbol g "
+                f"WHERE g.id_usuario = %s ORDER BY {order_col} {orden}",
+                (id_usuario,),
+            )
+            return cursor.fetchall()
+
+    def obtener_por_usuario_ordenado_asc(self, id_usuario: int) -> list[dict]:
+        """Igual que obtener_por_usuario pero ordenado ASC para análisis temporal."""
+        return self._listar_por_usuario(id_usuario, orden="ASC")
 
     def obtener_todos(self) -> list[dict]:
         with get_connection() as (conn, cursor):
@@ -132,15 +204,7 @@ class FutbolModel:
             return cursor.fetchone()
 
     def obtener_por_usuario(self, id_usuario: int) -> list[dict]:
-        with get_connection() as (conn, cursor):
-            campos = self._campos_golpeos_select(cursor, alias="g")
-            order_col = "g.fecha_golpeo" if self._tiene_columna(cursor, "golpes_futbol", "fecha_golpeo") else "g.fecha"
-            cursor.execute(
-                f"SELECT {campos} FROM golpes_futbol g "
-                f"WHERE g.id_usuario = %s ORDER BY {order_col} DESC",
-                (id_usuario,),
-            )
-            return cursor.fetchall()
+        return self._listar_por_usuario(id_usuario, orden="DESC")
 
     def eliminar(self, id_golpeo: int) -> bool:
         with get_connection() as (conn, cursor):
@@ -207,3 +271,32 @@ class FutbolModel:
         except mysql.connector.Error as exc:
             logging.getLogger(__name__).warning("guardar_video_bd fallo: %s", exc)
             return False
+
+
+# ── Helpers de modulo ──
+
+def _safe_int(valor):
+    if valor is None:
+        return None
+    try:
+        return int(valor)
+    except (TypeError, ValueError):
+        return None
+
+
+def _parse_json(raw):
+    if raw is None:
+        return None
+    if isinstance(raw, (dict, list)):
+        return raw
+    if isinstance(raw, (bytes, bytearray)):
+        try:
+            raw = raw.decode("utf-8")
+        except Exception:
+            return None
+    if isinstance(raw, str):
+        try:
+            return json.loads(raw)
+        except (TypeError, ValueError):
+            return None
+    return None
