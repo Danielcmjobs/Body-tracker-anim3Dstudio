@@ -193,6 +193,14 @@
                 Generar vídeo anotado
             </button>
             <video id="video-anotado-player" controls style="display:none; width:100%; margin-top:12px;"></video>
+            <div id="preview-landmarks" class="preview-landmarks" style="display:none;">
+                <h3 class="panel-title">Reproduccion con landmarks</h3>
+                <div class="preview-video-wrap">
+                    <video id="preview-video" class="preview-video" controls></video>
+                    <canvas id="preview-canvas" class="preview-canvas"></canvas>
+                </div>
+                <p class="sensor-nota">Overlay en vivo con pose y balon (heuristica). Puede variar segun luz y fondo.</p>
+            </div>
         </div>
     </section>
 
@@ -202,5 +210,6 @@
     <script src="js/api_futbol.js"></script>
     <script src="js/registro_futbol.js"></script>
     <script src="js/futbol.js"></script>
+    <script type="module" src="js/futbol_landmarks.js"></script>
 </body>
 </html>

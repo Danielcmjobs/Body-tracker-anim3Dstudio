@@ -138,6 +138,10 @@ document.addEventListener('DOMContentLoaded', () => {
                 metodoOrigen: metodoOrigen
             });
             pintarResultados(resultado);
+            // Vista local con landmarks para reproducir el video analizado en el navegador.
+            if (window.futbolLandmarksPreview && typeof window.futbolLandmarksPreview.setVideoBlob === 'function') {
+                window.futbolLandmarksPreview.setVideoBlob(videoBlob);
+            }
             mostrarToast('Analisis completado', 'success');
         } catch (error) {
             mostrarToast(error.message || 'Error al procesar el video.', 'error');

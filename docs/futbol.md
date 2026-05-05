@@ -57,8 +57,24 @@ Tabla `golpes_futbol`:
 - `estabilidad_tronco`, `pierna_golpeo`, `pierna_apoyo`, `confianza`, `metodo_origen`, `fecha_golpeo`.
 - `video_blob`, `video_nombre`, `video_mime` para almacenamiento opcional de video.
 
+## Landmarks en vivo y reproduccion local
+
+El frontend de futbol incluye un overlay en tiempo real (camara) y una previsualizacion
+del video analizado con los landmarks del cuerpo y una deteccion heuristica del balon.
+
+- Se usa MediaPipe PoseLandmarker en el navegador para dibujar la pose por frame.
+- El balon se estima por movimiento entre frames (diferencia de imagen) y se suaviza.
+- La heuristica se guia por los pies cuando hay landmarks disponibles.
+- La previsualizacion local no modifica el pipeline del backend; es solo overlay visual.
+
+Limitaciones conocidas:
+
+- La deteccion del balon depende de luz, fondo y contraste.
+- Si hay mucho movimiento en escena, la heuristica puede perder precision.
+- En dispositivos lentos, el overlay puede ir a menos FPS para mantener fluidez.
+
 ## Ampliaciones futuras
 
-- Seguimiento del balon para evaluar punto de impacto.
+- Seguimiento avanzado del balon con modelo dedicado (mejor que heuristica).
 - Clasificacion automatica de calidad del golpeo.
 - Comparativa historica por usuario.
