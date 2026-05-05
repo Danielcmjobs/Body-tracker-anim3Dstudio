@@ -13,6 +13,11 @@ document.addEventListener('DOMContentLoaded', () => {
     let chunks = [];
     let stream = null;
     let grabando = false;
+    // Estado del ultimo analisis aceptado (para acciones posteriores).
+    let ultimoVideoBlob = null;
+    let ultimoResultado = null;
+    // Marca cada llamada a procesarVideo; descarta resultados de llamadas obsoletas.
+    let analisisSeq = 0;
 
     // Muestra un toast informativo temporal.
     function mostrarToast(mensaje, tipo = 'info', duracionMs = 2200) {
@@ -120,7 +125,11 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Envia el video al backend y muestra los resultados.
     async function procesarVideo(videoBlob, metodoOrigen = 'video_galeria') {
-        ultimoVideoBlob = videoBlob;
+        const seq = ++analisisSeq;
+        // Limpia preview anterior antes de iniciar uno nuevo.
+        if (window.futbolLandmarksPreview && typeof window.futbolLandmarksPreview.reset === 'function') {
+            window.futbolLandmarksPreview.reset();
+        }
         mostrarToast('Procesando video...', 'info');
         try {
             const usuario = getUsuarioActivo();
@@ -137,19 +146,27 @@ document.addEventListener('DOMContentLoaded', () => {
                 guardarVideoBd: guardarVideo && guardarBd,
                 metodoOrigen: metodoOrigen
             });
-            pintarResultados(resultado);
+
+            // Si llegó otro analisis mientras esperabamos, descartamos este.
+            if (seq !== analisisSeq) {
+                return;
+            }
+            ultimoVideoBlob = videoBlob;
+            pintarResultados(resultado, videoBlob);
             // Vista local con landmarks para reproducir el video analizado en el navegador.
             if (window.futbolLandmarksPreview && typeof window.futbolLandmarksPreview.setVideoBlob === 'function') {
                 window.futbolLandmarksPreview.setVideoBlob(videoBlob);
             }
             mostrarToast('Analisis completado', 'success');
         } catch (error) {
-            mostrarToast(error.message || 'Error al procesar el video.', 'error');
+            if (seq === analisisSeq) {
+                mostrarToast(error.message || 'Error al procesar el video.', 'error');
+            }
         }
     }
 
     // Vuelca las metricas calculadas en el panel.
-    function pintarResultados(data) {
+    function pintarResultados(data, videoBlob) {
         setValor('data-pierna-apoyo', data.pierna_apoyo || '--');
         setValor('data-pierna-golpeo', data.pierna_golpeo || '--');
         setValor('data-angulo-cadera', formatearGrados(data.angulo_cadera_deg));
@@ -167,7 +184,7 @@ document.addEventListener('DOMContentLoaded', () => {
         pintarAlertas(data.alertas, data.observaciones);
         pintarCurvas(data.curvas);
         pintarVelocidades(data.velocidades_articulares, data.curvas && data.curvas.timestamps_s);
-        prepararAcciones(data, ultimoVideoBlob);
+        prepararAcciones(data, videoBlob);
 
         // Analítica del jugador (solo si hay usuario activo)
         const usuario = getUsuarioActivo();
@@ -279,9 +296,6 @@ document.addEventListener('DOMContentLoaded', () => {
         });
         panel.style.display = 'block';
     }
-
-    let ultimoVideoBlob = null;
-    let ultimoResultado = null;
 
     function prepararAcciones(data, videoBlob) {
         const panel = document.getElementById('panel-acciones');
@@ -427,12 +441,15 @@ document.addEventListener('DOMContentLoaded', () => {
                 labelVisual.textContent = 'Enviando al servidor...';
                 labelVisual.classList.add('uploading');
             }
-            await procesarVideo(archivo, 'video_galeria');
-            if (labelVisual) {
-                labelVisual.textContent = 'Subir video de la galeria';
-                labelVisual.classList.remove('uploading');
+            try {
+                await procesarVideo(archivo, 'video_galeria');
+            } finally {
+                if (labelVisual) {
+                    labelVisual.textContent = 'Subir video de la galeria';
+                    labelVisual.classList.remove('uploading');
+                }
+                inputArchivo.value = '';
             }
-            inputArchivo.value = '';
         });
     }
 

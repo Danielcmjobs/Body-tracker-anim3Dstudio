@@ -410,21 +410,32 @@ El backend del modulo futbol (puerto 5002) expone endpoints equivalentes para us
 
 | Metodo | Ruta | Descripcion |
 |--------|------|-------------|
-| `GET` | `/api/usuarios` | Lista usuarios (soporta `paginado=1`) |
-| `POST` | `/api/usuarios` | Crea usuario (`alias`, `nombre_completo`, `altura_m`, `peso_kg` opcional) |
-| `GET` | `/api/usuarios/<id>` | Obtiene usuario |
-| `PUT` | `/api/usuarios/<id>` | Actualiza usuario |
-| `DELETE` | `/api/usuarios/<id>` | Elimina usuario y sus golpeos (CASCADE) |
-| `GET` | `/api/usuarios/<id>/golpeos` | Lista golpeos del usuario |
+| `GET` | `/api/usuarios_futbol` | Lista usuarios (soporta `paginado=1`) |
+| `POST` | `/api/usuarios_futbol` | Crea usuario (`alias`, `nombre_completo`, `altura_m`, `peso_kg` opcional) |
+| `GET` | `/api/usuarios_futbol/<id>` | Obtiene usuario |
+| `PUT` | `/api/usuarios_futbol/<id>` | Actualiza usuario |
+| `DELETE` | `/api/usuarios_futbol/<id>` | Elimina usuario y sus golpeos (CASCADE) |
 
 #### Golpeos
 
 | Metodo | Ruta | Descripcion |
 |--------|------|-------------|
-| `POST` | `/api/futbol/analizar` | Analiza video y opcionalmente guarda en BD |
+| `POST` | `/api/futbol/analizar` | Analiza video y opcionalmente guarda en BD. Devuelve metricas + curvas + fases + alertas + clasificacion |
+| `POST` | `/api/futbol/video-anotado` | Devuelve MP4 con overlay (esqueleto, angulos, banner de impacto, trayectoria del pie) |
 | `GET` | `/api/golpeos` | Lista golpeos guardados |
 | `GET` | `/api/golpeos/<id>` | Obtiene un golpeo |
+| `GET` | `/api/golpeos/<id>/curvas` | Curvas angulares por frame |
+| `GET` | `/api/golpeos/<id>/landmarks` | Landmarks por frame (visor) |
+| `GET` | `/api/golpeos/<id>/alertas` | Alertas almacenadas |
 | `DELETE` | `/api/golpeos/<id>` | Elimina un golpeo |
+
+#### Analitica por jugador
+
+| Metodo | Ruta | Descripcion |
+|--------|------|-------------|
+| `GET` | `/api/usuarios_futbol/<id>/fatiga?metrica=velocidad_pie_ms` | Fatiga intra-sesion (ventana 2h): pendiente, caida % |
+| `GET` | `/api/usuarios_futbol/<id>/tendencia?metrica=&semanas=4` | Regresion lineal sobre historial. Estado: mejorando/estancado/empeorando |
+| `GET` | `/api/usuarios_futbol/<id>/comparativa?n=4` | Ultimas N patadas con metricas clave |
 
 #### Videos
 

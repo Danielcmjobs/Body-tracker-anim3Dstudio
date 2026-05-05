@@ -366,13 +366,39 @@ function mostrarPreview(videoBlob) {
     iniciarPreviewOverlay();
 }
 
+// Detiene el loop de preview, limpia el canvas y libera el blob URL.
+function resetPreview() {
+    previewLoopActivo = false;
+    lastPreviewTime = -1;
+    ballStatePreview.prev = null;
+    ballStatePreview.ultimaDeteccion = null;
+    ballStatePreview.frameCount = 0;
+
+    if (previewVideo) {
+        try { previewVideo.pause(); } catch (_e) { /* ignore */ }
+        previewVideo.removeAttribute("src");
+        try { previewVideo.load(); } catch (_e) { /* ignore */ }
+    }
+    if (previewCtx && previewCanvas) {
+        previewCtx.clearRect(0, 0, previewCanvas.width, previewCanvas.height);
+    }
+    if (previewWrap) {
+        previewWrap.style.display = "none";
+    }
+    if (previewUrl) {
+        URL.revokeObjectURL(previewUrl);
+        previewUrl = null;
+    }
+}
+
 // API publica para futbol.js
 window.futbolLandmarksPreview = {
     setVideoBlob: (videoBlob) => {
         if (videoBlob) {
             mostrarPreview(videoBlob);
         }
-    }
+    },
+    reset: () => resetPreview()
 };
 
 // Arranca el overlay en vivo cuando el stream esta disponible.
