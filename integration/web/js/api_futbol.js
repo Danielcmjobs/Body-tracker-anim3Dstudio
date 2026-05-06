@@ -1,6 +1,18 @@
 // api_futbol.js — llamadas al backend de futbol.
 // getFutbolBaseUrl() se carga desde js/config.js
 
+// Valida que la altura sea un numero entre 0.50 y 2.50 m.
+// Lanza Error con mensaje legible si no lo es.
+function _validarAlturaObligatoria(alturaM) {
+    const altura = Number(alturaM);
+    if (alturaM === null || alturaM === undefined || alturaM === '' || Number.isNaN(altura)) {
+        throw new Error('La altura es obligatoria. Indica un valor entre 0.50 y 2.50 metros.');
+    }
+    if (altura < 0.50 || altura > 2.50) {
+        throw new Error('La altura debe estar entre 0.50 y 2.50 metros.');
+    }
+}
+
 // Llama al backend y devuelve JSON con manejo de errores.
 async function fetchJsonFutbol(url, options = {}) {
     let respuesta;
@@ -60,6 +72,7 @@ async function analizarGolpeo(videoBlob, opciones = {}) {
 }
 
 async function crearUsuarioFutbol(alias, nombreCompleto, alturaM, pesoKg) {
+    _validarAlturaObligatoria(alturaM);
     const url = `${getFutbolBaseUrl()}/api/usuarios`;
     const body = {
         alias: alias,
@@ -77,6 +90,7 @@ async function crearUsuarioFutbol(alias, nombreCompleto, alturaM, pesoKg) {
 }
 
 async function actualizarUsuarioFutbol(idUsuario, alias, nombreCompleto, alturaM, pesoKg) {
+    _validarAlturaObligatoria(alturaM);
     const url = `${getFutbolBaseUrl()}/api/usuarios/${idUsuario}`;
     const body = {
         alias: alias,

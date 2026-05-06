@@ -33,9 +33,20 @@ def get_usuario(id_usuario):
 @usuarios_futbol_bp.route("/api/usuarios_futbol", methods=["POST"])
 def create_usuario():
     data = request.json
-    if not data or not data.get("alias") or not data.get("nombre"):
-        return jsonify({"error": "Datos incompletos"}), 400
-    
+    if not data or not data.get("alias") or not (data.get("nombre") or data.get("nombre_completo")):
+        return jsonify({"error": "Datos incompletos (alias y nombre obligatorios)"}), 400
+
+    altura_raw = data.get("altura_m")
+    if altura_raw is None or str(altura_raw).strip() == "":
+        return jsonify({"error": "La altura (altura_m) es obligatoria"}), 400
+    try:
+        altura = float(altura_raw)
+    except (TypeError, ValueError):
+        return jsonify({"error": "altura_m debe ser un numero valido"}), 400
+    if not (0.50 <= altura <= 2.50):
+        return jsonify({"error": "altura_m debe estar entre 0.50 y 2.50 metros"}), 400
+    data["altura_m"] = altura
+
     nuevo_id = modelo.crear(data)
     if nuevo_id:
         return jsonify({"id_usuario": nuevo_id}), 201
@@ -47,7 +58,19 @@ def update_usuario(id_usuario):
     data = request.json
     if not data:
         return jsonify({"error": "Datos incompletos"}), 400
-    
+
+    if "altura_m" in data:
+        altura_raw = data.get("altura_m")
+        if altura_raw is None or str(altura_raw).strip() == "":
+            return jsonify({"error": "La altura (altura_m) es obligatoria"}), 400
+        try:
+            altura = float(altura_raw)
+        except (TypeError, ValueError):
+            return jsonify({"error": "altura_m debe ser un numero valido"}), 400
+        if not (0.50 <= altura <= 2.50):
+            return jsonify({"error": "altura_m debe estar entre 0.50 y 2.50 metros"}), 400
+        data["altura_m"] = altura
+
     filas_afectadas = modelo.actualizar(id_usuario, data)
     if filas_afectadas > 0:
         return jsonify({"mensaje": "Usuario actualizado"}), 200
