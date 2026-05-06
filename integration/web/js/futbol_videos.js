@@ -175,7 +175,7 @@ async function cargarUsuarios() {
         .forEach((u) => {
             const opt = document.createElement('option');
             opt.value = String(u.id_usuario);
-            const nombre = u.alias || u.nombre || 'Usuario';
+            const nombre = u.alias || u.nombre_completo || u.nombre || 'Usuario';
             opt.textContent = `${nombre} (ID ${u.id_usuario})`;
             select.appendChild(opt);
         });

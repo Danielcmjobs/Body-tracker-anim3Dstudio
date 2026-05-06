@@ -572,6 +572,19 @@ body {
     gap: 0.5rem;
 }
 
+.user-form-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0.6rem;
+    width: 100%;
+}
+
+@media (max-width: 520px) {
+    .user-form-grid {
+        grid-template-columns: 1fr;
+    }
+}
+
 .tabla-usuarios-wrapper {
     max-height: 220px;
     overflow-y: auto;

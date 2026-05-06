@@ -1,6 +1,36 @@
 // getBackendBaseUrl() se carga desde js/config.js
 // fetchJson() se carga desde js/api-client.js
 
+// Crear un fallback global para API_URL_FUTBOL_USERS cuando la página
+// no cargue el script específico `registro_futbol.js` (p.ej. salto.html).
+if (typeof API_URL_FUTBOL_USERS === 'undefined') {
+    // config.js define getFutbolBaseUrl(); lo incluimos antes de este script en las páginas.
+    window.API_URL_FUTBOL_USERS = `${getFutbolBaseUrl()}/api/usuarios_futbol`;
+}
+
+// Fallback: si la página no carga `registro_futbol.js`, proveer obtenerUsuariosPaginados
+if (typeof obtenerUsuariosPaginados === 'undefined') {
+    window.obtenerUsuariosPaginados = async function ({ search = '', limit = 20, offset = 0 } = {}) {
+        const query = new URLSearchParams({
+            paginado: '1',
+            search,
+            limit: String(limit),
+            offset: String(offset),
+        });
+        const url = `${window.API_URL_FUTBOL_USERS}?${query.toString()}`;
+        const payload = await fetchJson(url);
+        const items = Array.isArray(payload.usuarios) ? payload.usuarios : [];
+        const total = Number(payload.total || 0);
+        return {
+            items,
+            total,
+            limit,
+            offset,
+            has_more: (offset + items.length) < total,
+        };
+    };
+}
+
 function setUsuarioActivo(usuario) {
     sessionStorage.setItem('idUser', String(usuario.id_usuario));
     sessionStorage.setItem('aliasUser', usuario.alias);
@@ -48,11 +78,17 @@ function limpiarUsuarioActivo(mensaje = 'Sin usuario activo.') {
 }
 
 async function crearUsuario(data) {
-    return await fetchJson(API_URL_FUTBOL_USERS, {
+    const payload = await fetchJson(API_URL_FUTBOL_USERS, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(data)
     });
+
+    const idUsuario = Number(payload.id_usuario);
+    if (!Number.isFinite(idUsuario) || idUsuario <= 0) {
+        throw new Error('El backend no devolvió un id_usuario válido');
+    }
+    return idUsuario;
 }
 
 async function actualizarUsuario(id, data) {
@@ -281,7 +317,7 @@ document.addEventListener('DOMContentLoaded', () => {
         actualizarEstadosTabla();
 
         try {
-            const data = await obtenerUsuariosPaginados({
+            const data = await (window.obtenerUsuariosPaginados || obtenerUsuariosPaginados)({
                 search: terminoBusqueda,
                 limit: PAGE_SIZE,
                 offset: usuariosOffset

@@ -49,7 +49,10 @@
                 <table class="tabla-usuarios">
                     <thead>
                         <tr>
-                            <th>Usuario</th>
+                            <th>Alias</th>
+                            <th>Nombre</th>
+                            <th>Altura</th>
+                            <th>Peso</th>
                         </tr>
                     </thead>
                     <tbody id="tabla-usuarios-body"></tbody>
@@ -67,10 +70,14 @@
             </div>
 
             <div class="user-form-grid">
-                <input type="text" id="form-alias" class="modern-input" placeholder="Alias" required>
-                <input type="text" id="form-nombre" class="modern-input" placeholder="Nombre" required>
+                <input type="text" id="form-alias" class="modern-input" placeholder="Alias" required maxlength="50">
+                <input type="text" id="form-nombre" class="modern-input" placeholder="Nombre completo" required maxlength="120">
             </div>
-            <p class="sensor-nota">Usa un alias corto y un nombre identificable para el listado.</p>
+            <div class="user-form-grid">
+                <input type="number" id="form-altura" class="modern-input" placeholder="Altura en metros (Ej: 1.75)" required step="0.01" min="0.50" max="2.50">
+                <input type="number" id="form-peso" class="modern-input" placeholder="Peso en kg (opcional)" step="0.1" min="20" max="300">
+            </div>
+            <p class="sensor-nota">Completa alias, nombre, altura y peso para mantener datos coherentes entre modulos.</p>
             <div class="form-actions">
                 <button id="btn-guardar-usuario" class="btn-accion">Guardar usuario</button>
                 <button id="btn-cancelar-edicion" class="btn-accion btn-secondary" style="display: none;">Cancelar</button>
@@ -204,12 +211,12 @@
         </div>
     </section>
 
-    <script src="js/config.js"></script>
+    <script src="js/config.js?v=20260506c"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
-    <script src="js/api-client.js"></script>
-    <script src="js/api_futbol.js"></script>
-    <script src="js/registro_futbol.js"></script>
-    <script src="js/futbol.js"></script>
-    <script type="module" src="js/futbol_landmarks.js"></script>
+    <script src="js/api-client.js?v=20260506c"></script>
+    <script src="js/api_futbol.js?v=20260506c"></script>
+    <script src="js/registro_futbol.js?v=20260506c"></script>
+    <script src="js/futbol.js?v=20260506c"></script>
+    <script type="module" src="js/futbol_landmarks.js?v=20260506c"></script>
 </body>
 </html>

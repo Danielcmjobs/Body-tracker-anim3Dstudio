@@ -115,15 +115,33 @@ function fijarTamanoGraficasAnalitica() {
 // getBackendBaseUrl() se carga desde js/config.js
 
 function getUsuarioActivo() {
-    const idUsuario = sessionStorage.getItem('idUser');
+    const rawId = sessionStorage.getItem('idUser');
     const altura = parseFloat(sessionStorage.getItem('alturaUser') || '0');
 
-    if (!idUsuario || !(altura > 0)) {
+    if (!rawId || !(altura > 0)) {
+        return null;
+    }
+
+    // Normalizar posibles formatos erróneos: "123", "{...}", or accidental "[object Object]".
+    let idNum = Number(rawId);
+    if (!Number.isFinite(idNum)) {
+        // Intentar parsear JSON si parece un objeto serializado
+        try {
+            const parsed = JSON.parse(rawId);
+            if (parsed) {
+                idNum = Number(parsed.id_usuario || parsed.idUser || parsed.id || parsed);
+            }
+        } catch (_e) {
+            // No JSON — dejar idNum invalido
+        }
+    }
+
+    if (!Number.isFinite(idNum) || idNum <= 0) {
         return null;
     }
 
     return {
-        idUsuario: Number(idUsuario),
+        idUsuario: Number(idNum),
         altura: altura
     };
 }
@@ -2007,7 +2025,10 @@ document.addEventListener('videoListo', async (evento) => {
     formData.append('altura_real_m', alturaUsuario);
 
     if (idUsuario) {
-        formData.append('id_usuario', idUsuario);
+        const idNum = Number(idUsuario);
+        if (Number.isFinite(idNum) && idNum > 0) {
+            formData.append('id_usuario', String(idNum));
+        }
         formData.append('metodo_origen', 'video_galeria');
     }
     // Mantiene el mismo contrato de salida que tiempo real para visor landmarks.
@@ -3566,7 +3587,10 @@ function configurarBotonVideoAnotado(datos) {
 
             const idUsuario = sessionStorage.getItem('idUser');
             if (idUsuario) {
-                formData.append('id_usuario', idUsuario);
+                const idNum = Number(idUsuario);
+                if (Number.isFinite(idNum) && idNum > 0) {
+                    formData.append('id_usuario', String(idNum));
+                }
             }
 
             const respuesta = await fetch(`${getBackendBaseUrl()}/api/salto/video-anotado`, {
