@@ -1,33 +1,30 @@
 // getBackendBaseUrl() se carga desde js/config.js
 // fetchJson() se carga desde js/api-client.js
+//
+// Esta pantalla pertenece al modulo SALTO y consume su propia API
+// (`/api/usuarios` en el backend de salto, puerto 5001). Como la BD
+// `bd_anim3d` esta unificada, los usuarios creados aqui son los mismos
+// que vera el modulo de futbol.
 
-// Crear un fallback global para API_URL_FUTBOL_USERS cuando la página
-// no cargue el script específico `registro_futbol.js` (p.ej. salto.html).
-if (typeof API_URL_FUTBOL_USERS === 'undefined') {
-    // config.js define getFutbolBaseUrl(); lo incluimos antes de este script en las páginas.
-    window.API_URL_FUTBOL_USERS = `${getFutbolBaseUrl()}/api/usuarios_futbol`;
+function _baseUsuarios() {
+    return `${getBackendBaseUrl()}/api/usuarios`;
 }
 
-// Fallback: si la página no carga `registro_futbol.js`, proveer obtenerUsuariosPaginados
-if (typeof obtenerUsuariosPaginados === 'undefined') {
-    window.obtenerUsuariosPaginados = async function ({ search = '', limit = 20, offset = 0 } = {}) {
-        const query = new URLSearchParams({
-            paginado: '1',
-            search,
-            limit: String(limit),
-            offset: String(offset),
-        });
-        const url = `${window.API_URL_FUTBOL_USERS}?${query.toString()}`;
-        const payload = await fetchJson(url);
-        const items = Array.isArray(payload.usuarios) ? payload.usuarios : [];
-        const total = Number(payload.total || 0);
-        return {
-            items,
-            total,
-            limit,
-            offset,
-            has_more: (offset + items.length) < total,
-        };
+async function obtenerUsuariosPaginados({ search = '', limit = 20, offset = 0 } = {}) {
+    const query = new URLSearchParams({
+        paginado: '1',
+        search,
+        limit: String(limit),
+        offset: String(offset),
+    });
+    const payload = await fetchJson(`${_baseUsuarios()}?${query.toString()}`);
+    const items = Array.isArray(payload.items) ? payload.items : [];
+    return {
+        items,
+        total: Number(payload.total || 0),
+        limit: Number(payload.limit || limit),
+        offset: Number(payload.offset || offset),
+        has_more: Boolean(payload.has_more),
     };
 }
 
@@ -78,7 +75,7 @@ function limpiarUsuarioActivo(mensaje = 'Sin usuario activo.') {
 }
 
 async function crearUsuario(data) {
-    const payload = await fetchJson(API_URL_FUTBOL_USERS, {
+    const payload = await fetchJson(_baseUsuarios(), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(data)
@@ -86,13 +83,13 @@ async function crearUsuario(data) {
 
     const idUsuario = Number(payload.id_usuario);
     if (!Number.isFinite(idUsuario) || idUsuario <= 0) {
-        throw new Error('El backend no devolvió un id_usuario válido');
+        throw new Error('El backend no devolvio un id_usuario valido');
     }
     return idUsuario;
 }
 
 async function actualizarUsuario(id, data) {
-    return await fetchJson(`${API_URL_FUTBOL_USERS}/${id}`, {
+    return await fetchJson(`${_baseUsuarios()}/${id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(data)
@@ -100,19 +97,19 @@ async function actualizarUsuario(id, data) {
 }
 
 async function eliminarUsuario(id) {
-    return await fetchJson(`${API_URL_FUTBOL_USERS}/${id}`, {
+    return await fetchJson(`${_baseUsuarios()}/${id}`, {
         method: 'DELETE'
     });
 }
 
 async function fetchUsuarios(paginado = true, search = '', limit = 20, offset = 0) {
     const params = new URLSearchParams({
-        paginado: String(paginado),
+        paginado: paginado ? '1' : '0',
         search,
-        limit,
-        offset
+        limit: String(limit),
+        offset: String(offset)
     });
-    return await fetchJson(`${API_URL_FUTBOL_USERS}?${params.toString()}`);
+    return await fetchJson(`${_baseUsuarios()}?${params.toString()}`);
 }
 
 document.addEventListener('DOMContentLoaded', () => {
@@ -239,11 +236,8 @@ document.addEventListener('DOMContentLoaded', () => {
         limpiarFormularioUsuario();
     }
 
-    function obtenerEdadTexto(u) {
-        if (u.edad !== undefined && u.edad !== null && String(u.edad).trim() !== '') {
-            return String(u.edad);
-        }
-        if (u.altura_m !== undefined && u.altura_m !== null) {
+    function obtenerAlturaTexto(u) {
+        if (u.altura_m !== undefined && u.altura_m !== null && String(u.altura_m).trim() !== '') {
             return `${u.altura_m} m`;
         }
         return '-';
@@ -258,24 +252,17 @@ document.addEventListener('DOMContentLoaded', () => {
         if (Number(u.id_usuario) === usuarioActivoId) {
             tr.classList.add('activo');
             usuarioActivoData = u;
-            setUsuarioActivo({
-                id_usuario: u.id_usuario,
-                alias: u.alias,
-                nombre_completo: u.nombre_completo,
-                altura_m: Number(u.altura_m),
-                peso_kg: u.peso_kg != null ? Number(u.peso_kg) : null,
-            });
         }
 
         const tdAlias = document.createElement('td');
         tdAlias.textContent = u.alias || '';
         const tdNombre = document.createElement('td');
         tdNombre.textContent = u.nombre_completo || '';
-        const tdEdad = document.createElement('td');
-        tdEdad.textContent = obtenerEdadTexto(u);
+        const tdAltura = document.createElement('td');
+        tdAltura.textContent = obtenerAlturaTexto(u);
         const tdPeso = document.createElement('td');
         tdPeso.textContent = u.peso_kg != null ? `${u.peso_kg} kg` : '-';
-        tr.append(tdAlias, tdNombre, tdEdad, tdPeso);
+        tr.append(tdAlias, tdNombre, tdAltura, tdPeso);
 
         tr.addEventListener('click', () => {
             usuarioActivoId = Number(u.id_usuario);
@@ -317,7 +304,7 @@ document.addEventListener('DOMContentLoaded', () => {
         actualizarEstadosTabla();
 
         try {
-            const data = await (window.obtenerUsuariosPaginados || obtenerUsuariosPaginados)({
+            const data = await obtenerUsuariosPaginados({
                 search: terminoBusqueda,
                 limit: PAGE_SIZE,
                 offset: usuariosOffset
@@ -458,7 +445,12 @@ document.addEventListener('DOMContentLoaded', () => {
             btnCrearInline.textContent = modoEdicion ? 'Guardando...' : 'Creando...';
             try {
                 if (modoEdicion && usuarioActivoData) {
-                    await actualizarUsuario(usuarioActivoData.id_usuario, alias, nombre, altura, peso);
+                    await actualizarUsuario(usuarioActivoData.id_usuario, {
+                        alias: alias,
+                        nombre_completo: nombre,
+                        altura_m: altura,
+                        peso_kg: peso,
+                    });
                     usuarioActivoId = usuarioActivoData.id_usuario;
                 } else {
                     const idUsuario = await crearUsuario({

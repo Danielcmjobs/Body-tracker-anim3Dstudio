@@ -158,13 +158,6 @@ document.addEventListener('DOMContentLoaded', () => {
         if (Number(u.id_usuario) === usuarioActivoId) {
             tr.classList.add('activo');
             usuarioActivoData = u;
-            setUsuarioActivo({
-                id_usuario: u.id_usuario,
-                alias: u.alias,
-                nombre_completo: nombreCompleto,
-                altura_m: u.altura_m,
-                peso_kg: u.peso_kg,
-            });
         }
 
         const tdAlias = document.createElement('td');

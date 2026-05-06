@@ -191,3 +191,48 @@ Get-Content backup_pre_migracion_20260506_103613.sql -Raw | & $mysql -u root -p 
 ```
 
 Y revertir en `.env`: `DB_NAME=bd_anim3d_saltos`.
+
+---
+
+## 8. Cambios del frontend (revisión post-merge)
+
+Tras integrar el commit del compañero `74cd679` (registro futbol +
+correcciones de registro salto), se realizó una revisión y limpieza:
+
+### 8.1 Bugs corregidos
+
+| # | Archivo | Bug | Fix |
+|---|---------|-----|-----|
+| 1 | `integration/web/js/registro.js` | `actualizarUsuario(id, alias, nombre, altura, peso)` enviaba un string como JSON; el backend respondía 400 y la edición desde `salto.html` no funcionaba | Llamada corregida a `actualizarUsuario(id, { alias, nombre_completo, altura_m, peso_kg })` (firma `(id, data)`) |
+| 2 | `integration/web/js/registro.js` | `obtenerEdadTexto()` realmente pintaba la altura (mismatch con cabecera `<th>Altura</th>`) | Renombrada a `obtenerAlturaTexto()` y simplificada |
+
+### 8.2 Mejoras profesionales
+
+| # | Archivo | Antes | Ahora |
+|---|---------|-------|-------|
+| 1 | `integration/web/js/registro.js` | Apuntaba al backend de **futbol** (puerto 5002, `/api/usuarios_futbol`) mediante un bloque _fallback_ con `window.API_URL_FUTBOL_USERS` y `window.obtenerUsuariosPaginados` | Consume su backend nativo `getBackendBaseUrl()/api/usuarios` (salto, puerto 5001). Helper `_baseUsuarios()` y `obtenerUsuariosPaginados()` propio. Sin globals colgados de `window`. `salto.html` ya no requiere el backend de futbol arrancado para gestionar usuarios |
+| 2 | `integration/web/js/registro.js` y `registro_futbol.js` | `pintarFilaUsuario()` llamaba a `setUsuarioActivo()` por cada fila coincidente con el ID activo: reescribía sessionStorage y emitía el evento `usuarioSeleccionCambio` decenas de veces por carga/scroll | La fila activa solo aplica clase CSS y guarda referencia en memoria (`usuarioActivoData`). `setUsuarioActivo()` queda reservado a eventos reales (login, click explícito, crear/editar) |
+| 3 | `scripts/run_all.bat` | `CORS_ORIGINS=*` para los tres backends | Lista blanca explícita: `https://localhost:8443,https://127.0.0.1:8443,http://localhost:8080,http://127.0.0.1:8080` |
+
+### 8.3 Cambios del compañero validados (sin tocar)
+
+- `integration/web/js/api_salto.js` — `getUsuarioActivo()` defensivo
+  contra valores corruptos en sessionStorage (parsea JSON, descarta
+  `[object Object]`); coerciones `Number` antes de `formData.append('id_usuario', …)` en envíos a `/api/salto/analizar` y `/api/salto/video-anotado`.
+- `integration/web/js/registro_futbol.js` — `crearUsuario`/`actualizarUsuario` aceptan ahora un objeto `data`; tabla con columnas alias/nombre/altura/peso; validación 0.50–2.50 m y 20–300 kg.
+- `integration/web/futbol.html` — inputs altura/peso obligatorios + cache-busting `?v=20260506c`.
+- `integration/web/css/style.css` — clase `.user-form-grid` para el formulario inline.
+- `integration/web/js/futbol_videos.js` — soporta tanto `nombre_completo` como `nombre` legacy.
+- `.env.example` — `DB_NAME=bd_anim3d`.
+
+### 8.4 Validación funcional
+
+Después de los fixes:
+
+- `salto.html` → crear/editar/eliminar usuario funciona contra el
+  backend de salto sin necesidad del backend de futbol.
+- `futbol.html` → idéntico flujo contra el backend de futbol.
+- Ambos comparten datos al apuntar a `bd_anim3d`.
+- Tres capas de defensa para `altura_m` (HTML5 `required`, JS,
+  controlador) impiden crear usuarios sin altura.
+
