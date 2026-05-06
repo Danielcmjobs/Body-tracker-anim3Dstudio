@@ -159,6 +159,24 @@ class FutbolModel:
             )
             return cursor.fetchall()
 
+    def obtener_historial_analitica_usuario(self, id_usuario: int) -> list[dict]:
+        """Golpeos de un usuario con datos de alias para analítica avanzada."""
+        with get_connection() as (conn, cursor):
+            cursor.execute(
+                f"SELECT {_CAMPOS_VGOLPEOS} FROM v_golpeos "
+                "WHERE id_usuario = %s ORDER BY fecha_golpeo ASC",
+                (id_usuario,),
+            )
+            return cursor.fetchall()
+
+    def obtener_historial_analitica_global(self) -> list[dict]:
+        """Todos los golpeos con alias de usuario, para correlaciones y rankings globales."""
+        with get_connection() as (conn, cursor):
+            cursor.execute(
+                f"SELECT {_CAMPOS_VGOLPEOS} FROM v_golpeos ORDER BY fecha_golpeo ASC"
+            )
+            return cursor.fetchall()
+
     def obtener_por_id(self, id_golpeo: int) -> dict | None:
         with get_connection() as (conn, cursor):
             cursor.execute(
@@ -173,6 +191,21 @@ class FutbolModel:
             cursor.execute(
                 "DELETE FROM gestos WHERE id_gesto = %s AND modulo = 'futbol'",
                 (id_golpeo,),
+            )
+            return cursor.rowcount > 0
+
+    def actualizar_golpeo(self, id_golpeo: int, campos: dict) -> bool:
+        """Actualiza campos editables de un golpeo. Solo permite: notas, pierna_golpeo, metodo_origen."""
+        _permitidos = {"notas", "pierna_golpeo", "metodo_origen"}
+        seguros = {k: v for k, v in campos.items() if k in _permitidos}
+        if not seguros:
+            return False
+        set_clause = ", ".join(f"{col} = %s" for col in seguros)
+        valores = list(seguros.values()) + [id_golpeo]
+        with get_connection() as (conn, cursor):
+            cursor.execute(
+                f"UPDATE gestos_futbol SET {set_clause} WHERE id_golpeo = %s",
+                valores,
             )
             return cursor.rowcount > 0
 
