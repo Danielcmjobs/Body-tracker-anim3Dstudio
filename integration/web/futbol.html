@@ -215,6 +215,10 @@
                 <span id="data-apoyo-score" class="data-value">--</span>
             </div>
             <div class="data-box">
+                <span class="data-label">Score compuesto</span>
+                <span id="data-score-compuesto" class="data-value">--</span>
+            </div>
+            <div class="data-box">
                 <span class="data-label">Clasificación</span>
                 <span id="data-clasificacion" class="data-value">--</span>
             </div>
@@ -239,6 +243,28 @@
         <div id="panel-velocidades" class="panel-curvas" style="display:none;">
             <h3 class="panel-title">Velocidades articulares (°/s)</h3>
             <canvas id="grafico-velocidades" height="220"></canvas>
+        </div>
+
+        <div id="panel-comparativa-sesion" class="panel-analitica" style="display:none;">
+            <h3 class="panel-title">Comparativa de tiros — sesión actual</h3>
+            <p class="sensor-nota">Últimos 4 tiros analizados en esta sesión (se actualiza automáticamente).</p>
+            <div class="comparativa-wrapper">
+                <table class="tabla-comparativa">
+                    <thead>
+                        <tr>
+                            <th>#</th>
+                            <th>Score</th>
+                            <th>Vel. pie (m/s)</th>
+                            <th>Estabilidad</th>
+                            <th>Cadera (°)</th>
+                            <th>Rodilla (°)</th>
+                            <th>Tobillo (°)</th>
+                            <th>Clasificación</th>
+                        </tr>
+                    </thead>
+                    <tbody id="tbody-comparativa-sesion"></tbody>
+                </table>
+            </div>
         </div>
 
         <div id="panel-analitica" class="panel-analitica" style="display:none;">

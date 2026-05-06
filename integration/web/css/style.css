@@ -1414,6 +1414,45 @@ body {
     color: #eee;
 }
 
+/* ─── Comparativa de tiros en sesión ─── */
+.comparativa-wrapper {
+    overflow-x: auto;
+    width: 100%;
+}
+
+.tabla-comparativa {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.82rem;
+}
+
+.tabla-comparativa th,
+.tabla-comparativa td {
+    padding: 0.4rem 0.55rem;
+    text-align: center;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    white-space: nowrap;
+}
+
+.tabla-comparativa th {
+    color: rgba(203, 156, 255, 0.85);
+    font-weight: 600;
+    font-size: 0.78rem;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+}
+
+.tabla-comparativa tr:last-child td {
+    border-bottom: none;
+}
+
+.tabla-comparativa tr.fila-mejor td {
+    background: rgba(33, 150, 243, 0.15);
+    color: #64b5f6;
+    font-weight: 600;
+}
+
+
 /* Paso 6 — Comparativa de saltos */
 .landmarks-comparar-wrap {
     display: flex;

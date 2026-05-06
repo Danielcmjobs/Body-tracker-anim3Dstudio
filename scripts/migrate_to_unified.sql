@@ -314,3 +314,9 @@ SELECT
     (SELECT COUNT(*) FROM bd_anim3d_saltos.golpes_futbol)   AS golpeos_origen,
     (SELECT COUNT(*) FROM v_golpeos)                        AS golpeos_destino,
     (SELECT COUNT(*) FROM sesiones)                         AS sesiones_creadas;
+
+-- ── Paso 8. Añadir columnas nuevas a gestos_futbol (idempotente) ──────────
+-- Ejecutar si la BD ya existía antes de init_db_unificada.sql v2.
+ALTER TABLE gestos_futbol
+    ADD COLUMN IF NOT EXISTS asimetria_postura_pct DECIMAL(6,2) NULL,
+    ADD COLUMN IF NOT EXISTS score_compuesto       DECIMAL(5,1) NULL;
