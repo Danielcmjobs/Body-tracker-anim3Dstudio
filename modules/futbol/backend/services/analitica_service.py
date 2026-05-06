@@ -1,14 +1,27 @@
 """
 SERVICIO — Analítica avanzada del rendimiento de golpeo.
 
+Funciones base:
 - Detección de fatiga intra-sesión (ventana de 2h) basada en velocidad del pie.
 - Tendencia histórica con regresión lineal.
 - Comparativa de últimas N patadas.
+
+Funciones avanzadas (paridad con módulo salto):
+- Alertas de tendencia entre sesiones.
+- Comparativa entre sesiones.
+- Correlaciones entre métricas.
+- Detección de estancamiento/mejora.
+- Ranking de mejores sesiones.
+- Predicción lineal a N semanas.
+- Bloque analítico avanzado agregado.
 """
 
 from __future__ import annotations
 
 import math
+from collections import defaultdict
+
+import numpy as np
 
 from utils.session_utils import to_datetime, agrupar_sesiones
 
@@ -226,3 +239,332 @@ def _safe_float(v):
 def _safe_iso(v):
     dt = to_datetime(v)
     return dt.isoformat() if dt else (str(v) if v is not None else None)
+
+
+# ─────────────────────────────────────────────────────────────
+# Analítica avanzada (paridad con módulo salto)
+# ─────────────────────────────────────────────────────────────
+
+UMBRAL_CAIDA_FATIGA_PCT = 10.0
+UMBRAL_ESTANCADO_MS_SEMANA_ABS = 0.02  # m/s/semana para estancamiento absoluto
+
+
+def _pearson(xs: list[float], ys: list[float]) -> float | None:
+    if len(xs) < 2:
+        return None
+    x = np.array(xs, dtype=float)
+    y = np.array(ys, dtype=float)
+    if np.allclose(x, x[0]) or np.allclose(y, y[0]):
+        return None
+    corr = float(np.corrcoef(x, y)[0, 1])
+    return None if math.isnan(corr) else round(corr, 4)
+
+
+def _caida_pct_sesion_golpeos(sesion: list[dict], metrica: str = "velocidad_pie_ms") -> float:
+    valores = [_valor_metrica(g, metrica) for g in sesion]
+    valores = [v for v in valores if v is not None]
+    if len(valores) < 2 or valores[0] <= 0:
+        return 0.0
+    return ((valores[0] - valores[-1]) / valores[0]) * 100.0
+
+
+def calcular_alertas_tendencia(golpeos_ordenados: list[dict]) -> list[dict]:
+    """
+    Alertas heurísticas entre sesiones para golpeos:
+    - Fatiga repetida en sesiones consecutivas.
+    - Estabilidad de tronco degradándose progresivamente.
+    - Velocidad del pie en caída sostenida.
+    """
+    alertas: list[dict] = []
+    sesiones = agrupar_sesiones(golpeos_ordenados, campo_fecha="fecha_golpeo")
+    if not sesiones:
+        return alertas
+
+    # Alerta: patrón de fatiga repetido (>=2 sesiones consecutivas con caída >10%).
+    caidas = [
+        _caida_pct_sesion_golpeos(s)
+        for s in sesiones
+        if len(s) >= 2
+    ]
+    consecutivas = max_consecutivas = 0
+    for c in caidas:
+        if c > UMBRAL_CAIDA_FATIGA_PCT:
+            consecutivas += 1
+            max_consecutivas = max(max_consecutivas, consecutivas)
+        else:
+            consecutivas = 0
+    if max_consecutivas >= 2:
+        alertas.append({
+            "codigo": "fatiga_repetida",
+            "mensaje": (
+                f"Patrón de fatiga repetido: {max_consecutivas} sesiones consecutivas "
+                f"con caída de velocidad del pie > {UMBRAL_CAIDA_FATIGA_PCT:.0f}%."
+            ),
+            "severidad": "alta",
+        })
+
+    # Alerta: estabilidad de tronco empeora en últimas 3 sesiones.
+    if len(sesiones) >= 3:
+        medias_estab = []
+        for sesion in sesiones[-3:]:
+            vals = [_safe_float(g.get("estabilidad_tronco")) for g in sesion]
+            vals = [v for v in vals if v is not None]
+            if vals:
+                medias_estab.append(float(np.mean(vals)))
+        if len(medias_estab) == 3 and medias_estab[0] > medias_estab[1] > medias_estab[2]:
+            alertas.append({
+                "codigo": "estabilidad_tronco_empeora",
+                "mensaje": "La estabilidad de tronco media empeora progresivamente en las últimas 3 sesiones.",
+                "severidad": "media",
+            })
+
+    # Alerta: velocidad del pie en caída sostenida (últimas 5 sesiones).
+    if len(sesiones) >= 5:
+        medias_vel = []
+        for sesion in sesiones[-5:]:
+            vals = [_valor_metrica(g, "velocidad_pie_ms") for g in sesion]
+            vals = [v for v in vals if v is not None]
+            if vals:
+                medias_vel.append(float(np.mean(vals)))
+        if len(medias_vel) >= 3:
+            xs = list(range(len(medias_vel)))
+            pendiente, _, _ = _regresion_lineal(xs, medias_vel)
+            if pendiente < -0.05:
+                alertas.append({
+                    "codigo": "velocidad_pie_cae_sostenida",
+                    "mensaje": "La velocidad del pie muestra tendencia descendente sostenida en las últimas sesiones.",
+                    "severidad": "media",
+                })
+
+    return alertas
+
+
+def calcular_comparativa_sesiones(
+    golpeos_ordenados: list[dict],
+    metrica: str = "velocidad_pie_ms",
+    max_sesiones: int = 2,
+) -> dict:
+    """Compara las últimas N sesiones en la métrica indicada."""
+    sesiones = agrupar_sesiones(golpeos_ordenados, campo_fecha="fecha_golpeo")
+    if not sesiones:
+        return {"sesiones": [], "metrica": metrica, "unidad": "m/s"}
+
+    unidad = {
+        "velocidad_pie_ms": "m/s",
+        "angulo_cadera_deg": "°",
+        "angulo_rodilla_deg": "°",
+        "angulo_tobillo_deg": "°",
+        "estabilidad_tronco": "u",
+        "confianza": "",
+    }.get(metrica, "u")
+
+    seleccionadas = sesiones[-max_sesiones:]
+    payload = []
+    for idx, sesion in enumerate(seleccionadas, start=1):
+        inicio = to_datetime(sesion[0].get("fecha_golpeo"))
+        fin = to_datetime(sesion[-1].get("fecha_golpeo"))
+        serie = []
+        valores = []
+        for i, g in enumerate(sesion, start=1):
+            v = _valor_metrica(g, metrica)
+            if v is None:
+                continue
+            valores.append(v)
+            serie.append({"indice": i, "valor": round(v, 3)})
+        payload.append({
+            "nombre": f"Sesion {idx}",
+            "inicio": inicio.isoformat() if inicio else None,
+            "fin": fin.isoformat() if fin else None,
+            "n_golpeos": len(serie),
+            "media": round(float(np.mean(valores)), 3) if valores else 0.0,
+            "serie": serie,
+        })
+
+    return {"sesiones": payload, "metrica": metrica, "unidad": unidad}
+
+
+def calcular_correlaciones(historial_global: list[dict]) -> dict:
+    """
+    Correlaciones entre métricas clave de golpeo:
+    - Velocidad del pie vs estabilidad de tronco.
+    - Ángulo de cadera vs confianza de detección.
+    - Ángulo de rodilla vs velocidad del pie.
+    """
+    xs_vel, ys_estab = [], []
+    xs_cadera, ys_conf = [], []
+    xs_rodilla, ys_vel2 = [], []
+    puntos_vel_estab, puntos_cadera_conf = [], []
+
+    for row in historial_global:
+        vel = _safe_float(row.get("velocidad_pie_ms"))
+        estab = _safe_float(row.get("estabilidad_tronco"))
+        cadera = _safe_float(row.get("angulo_cadera_deg"))
+        conf = _safe_float(row.get("confianza"))
+        rodilla = _safe_float(row.get("angulo_rodilla_deg"))
+
+        if vel is not None and estab is not None:
+            xs_vel.append(vel)
+            ys_estab.append(estab)
+            if len(puntos_vel_estab) < 200:
+                puntos_vel_estab.append({
+                    "velocidad_pie_ms": vel,
+                    "estabilidad_tronco": estab,
+                    "alias": row.get("alias"),
+                })
+        if cadera is not None and conf is not None:
+            xs_cadera.append(cadera)
+            ys_conf.append(conf)
+            if len(puntos_cadera_conf) < 200:
+                puntos_cadera_conf.append({
+                    "angulo_cadera_deg": cadera,
+                    "confianza": conf,
+                    "alias": row.get("alias"),
+                })
+        if rodilla is not None and vel is not None:
+            xs_rodilla.append(rodilla)
+            ys_vel2.append(vel)
+
+    return {
+        "velocidad_estabilidad": {
+            "corr": _pearson(xs_vel, ys_estab),
+            "muestras": len(xs_vel),
+            "puntos": puntos_vel_estab,
+        },
+        "cadera_confianza": {
+            "corr": _pearson(xs_cadera, ys_conf),
+            "muestras": len(xs_cadera),
+            "puntos": puntos_cadera_conf,
+        },
+        "rodilla_velocidad": {
+            "corr": _pearson(xs_rodilla, ys_vel2),
+            "muestras": len(xs_rodilla),
+        },
+    }
+
+
+def detectar_estancamiento_mejora(
+    golpeos_ordenados: list[dict],
+    metrica: str = "velocidad_pie_ms",
+) -> dict:
+    """
+    Detecta si el atleta está estancado, mejorando o empeorando
+    comparando la ventana reciente con la ventana anterior.
+    Requiere al menos 8 golpeos.
+    """
+    serie = [_valor_metrica(g, metrica) for g in golpeos_ordenados]
+    serie = [v for v in serie if v is not None]
+
+    if len(serie) < 8:
+        return {
+            "suficientes_datos": False,
+            "mensaje": "Se requieren al menos 8 golpeos para evaluar estancamiento y mejora.",
+            "metrica": metrica,
+        }
+
+    ventana = min(6, max(3, len(serie) // 2))
+    recientes = np.array(serie[-ventana:], dtype=float)
+    anteriores = np.array(serie[-(ventana * 2):-ventana], dtype=float)
+
+    media_rec = float(np.mean(recientes))
+    media_ant = float(np.mean(anteriores))
+    var_rec = float(np.var(recientes))
+    delta = media_rec - media_ant
+    delta_pct = (delta / media_ant) * 100.0 if not math.isclose(media_ant, 0.0, abs_tol=1e-9) else 0.0
+
+    umbral_abs = {"velocidad_pie_ms": 0.05, "estabilidad_tronco": 0.03}.get(metrica, 0.02)
+    umbral_var = {"velocidad_pie_ms": 0.08, "estabilidad_tronco": 0.05}.get(metrica, 0.05)
+
+    var_ant = float(np.var(anteriores))
+    pooled = math.sqrt((var_rec / max(len(recientes), 1)) + (var_ant / max(len(anteriores), 1)))
+    z_score = delta / pooled if pooled > 0 else 0.0
+
+    mejora_significativa = bool(delta > umbral_abs and z_score > 1.96)
+    empeora_significativa = bool(delta < -umbral_abs and z_score < -1.96)
+    estancado = bool(abs(delta) < umbral_abs and var_rec < umbral_var)
+
+    return {
+        "suficientes_datos": True,
+        "metrica": metrica,
+        "ventana": ventana,
+        "media_anteriores": round(media_ant, 3),
+        "media_recientes": round(media_rec, 3),
+        "delta": round(delta, 3),
+        "delta_pct": round(delta_pct, 2),
+        "z_score": round(float(z_score), 3),
+        "varianza_reciente": round(var_rec, 4),
+        "estancado": estancado,
+        "mejora_significativa": mejora_significativa,
+        "empeora_significativa": empeora_significativa,
+    }
+
+
+def ranking_mejores_sesiones(
+    historial_global: list[dict],
+    top_n: int = 5,
+) -> list[dict]:
+    """
+    Ranking de sesiones por velocidad media del pie.
+    Agrupa por (id_usuario) y luego por sesión temporal.
+    """
+    grupos: dict[int, list[dict]] = defaultdict(list)
+    for row in historial_global:
+        id_u = row.get("id_usuario")
+        if id_u is not None:
+            grupos[int(id_u)].append(row)
+
+    sesiones_payload: list[dict] = []
+    for id_usuario, golpeos in grupos.items():
+        sesiones = agrupar_sesiones(golpeos, campo_fecha="fecha_golpeo")
+        for sesion in sesiones:
+            vels = [_valor_metrica(g, "velocidad_pie_ms") for g in sesion]
+            vels = [v for v in vels if v is not None]
+            if not vels:
+                continue
+            inicio = to_datetime(sesion[0].get("fecha_golpeo"))
+            sesiones_payload.append({
+                "id_usuario": id_usuario,
+                "alias": sesion[0].get("alias"),
+                "inicio": inicio.isoformat() if inicio else None,
+                "golpeos": len(vels),
+                "media_velocidad_pie_ms": round(float(np.mean(vels)), 3),
+                "max_velocidad_pie_ms": round(float(np.max(vels)), 3),
+            })
+
+    sesiones_payload.sort(key=lambda x: x["media_velocidad_pie_ms"], reverse=True)
+    top = sesiones_payload[:top_n]
+    for i, row in enumerate(top, start=1):
+        row["posicion"] = i
+    return top
+
+
+def calcular_analitica_avanzada(
+    golpeos_ordenados: list[dict],
+    historial_global: list[dict] | None = None,
+    metrica: str = "velocidad_pie_ms",
+) -> dict:
+    """
+    Bloque analítico agregado: combina alertas, estancamiento,
+    comparativa de sesiones y (opcionalmente) correlaciones globales.
+    Equivalente a analitica_avanzada del módulo salto.
+    """
+    alertas = calcular_alertas_tendencia(golpeos_ordenados)
+    estancamiento = detectar_estancamiento_mejora(golpeos_ordenados, metrica=metrica)
+    comparativa = calcular_comparativa_sesiones(golpeos_ordenados, metrica=metrica, max_sesiones=3)
+    correlaciones = calcular_correlaciones(historial_global) if historial_global else None
+
+    tendencia = calcular_tendencia(golpeos_ordenados, metrica=metrica)
+
+    return {
+        "metrica": metrica,
+        "estado_general": tendencia.get("estado", "sin_datos"),
+        "alertas": alertas,
+        "estancamiento": estancamiento,
+        "comparativa_sesiones": comparativa,
+        "correlaciones": correlaciones,
+        "resumen_tendencia": {
+            "pendiente": tendencia.get("pendiente"),
+            "r2": tendencia.get("r2"),
+            "prediccion_4_semanas": tendencia.get("prediccion_4_semanas"),
+            "numero_golpeos": tendencia.get("numero_golpeos"),
+        },
+    }

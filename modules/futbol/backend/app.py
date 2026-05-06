@@ -5,11 +5,18 @@ Recibe un video grabado desde el movil, lo procesa con MediaPipe
 para obtener metricas biomecanicas del golpeo.
 """
 
+import logging
 import os
 import uuid
 
 from dotenv import load_dotenv
 load_dotenv()
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+    datefmt="%Y-%m-%d %H:%M:%S",
+)
 
 from flask import Flask, jsonify, request, send_file
 from flask_cors import CORS
@@ -211,6 +218,13 @@ def alertas_golpeo(id_golpeo: int):
         return jsonify({"error": "Alertas no disponibles"}), 404
     return jsonify({"alertas": alertas})
 
+
+# ─────────────────────────────────────────────────────────────
+# LEGACY — Rutas deprecadas de analítica de usuario.
+# Mantener temporalmente por compatibilidad con clientes antiguos.
+# Usar en su lugar: /api/usuarios/<id>/fatiga|tendencia|comparativa
+# Fecha prevista de retirada: Fase 5 del roadmap de paridad.
+# ─────────────────────────────────────────────────────────────
 
 @app.route("/api/usuarios_futbol/<int:id_usuario>/fatiga", methods=["GET"])
 def fatiga_usuario(id_usuario: int):

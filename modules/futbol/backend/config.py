@@ -50,3 +50,41 @@ DB_CONFIG = {
     "charset": "utf8mb4",
     "collation": "utf8mb4_unicode_ci",
 }
+
+# ─────────────────────────────────────────────────────────────
+# Score compuesto de ejecución de tiro (0..100)
+# Pesos configurables vía variables de entorno (prefijo SCORE_).
+# La suma de pesos debe ser 1.0; se normaliza automáticamente.
+# ─────────────────────────────────────────────────────────────
+
+SCORE_PESOS_GOLPEO: dict[str, float] = {
+    "velocidad_pie_ms":   float(os.getenv("SCORE_PESO_VELOCIDAD",   "0.40")),
+    "estabilidad_tronco": float(os.getenv("SCORE_PESO_ESTABILIDAD", "0.25")),
+    "confianza":          float(os.getenv("SCORE_PESO_CONFIANZA",   "0.20")),
+    "angulo_cadera_deg":  float(os.getenv("SCORE_PESO_CADERA",      "0.15")),
+}
+
+# Rangos de referencia para normalización de cada métrica (min, max óptimo).
+SCORE_RANGOS_GOLPEO: dict[str, tuple[float, float]] = {
+    "velocidad_pie_ms":   (2.0, 18.0),   # m/s — 2 muy lento, 18 élite
+    "estabilidad_tronco": (0.3, 1.0),    # índice 0..1
+    "confianza":          (0.5, 1.0),    # índice MediaPipe 0..1
+    "angulo_cadera_deg":  (90.0, 160.0), # °  — rango técnico aceptable
+}
+
+# ─────────────────────────────────────────────────────────────
+# Clasificaciones de ejecución (enum estable)
+# Usadas como valor del campo `clasificacion` en gestos_futbol.
+# ─────────────────────────────────────────────────────────────
+
+CLASIFICACIONES_GOLPEO: tuple[str, ...] = (
+    "tecnica_estable",   # ejecución correcta sin alertas
+    "potencia_baja",     # velocidad del pie por debajo del umbral esperado
+    "inestabilidad",     # estabilidad de tronco insuficiente
+    "riesgo_lesion",     # ángulo articular fuera de rango seguro
+    "sin_clasificar",    # datos insuficientes para determinar categoría
+)
+
+UMBRAL_VELOCIDAD_BAJA_MS: float = float(os.getenv("UMBRAL_VELOCIDAD_BAJA", "5.0"))
+UMBRAL_ESTABILIDAD_BAJA: float = float(os.getenv("UMBRAL_ESTABILIDAD_BAJA", "0.50"))
+UMBRAL_ANGULO_RIESGO_DEG: float = float(os.getenv("UMBRAL_ANGULO_RIESGO", "75.0"))

@@ -11,6 +11,8 @@ Rutas:
     GET    /api/videos/<id>/stream -> Streaming de video guardado
 """
 
+import logging
+
 from flask import Blueprint, Response, jsonify, request
 from mysql.connector import IntegrityError
 
@@ -18,6 +20,8 @@ from models.futbol_model import FutbolModel
 from models.usuario_model import UsuarioModel
 from services.video_library_service import clasificar_videos
 from utils.serializers import serializar_row as _serializar
+
+logger = logging.getLogger(__name__)
 
 futbol_db_bp = Blueprint("futbol_db", __name__)
 modelo = FutbolModel()
@@ -63,6 +67,7 @@ def guardar_golpeo():
         return jsonify({"error": "id_usuario debe ser un entero"}), 400
 
     if not usuario_model.obtener_por_id(id_usuario_int):
+        logger.warning("[GOLPEO] Guardado fallido: id_usuario=%s no encontrado", id_usuario_int)
         return jsonify({"error": "Usuario no encontrado"}), 404
 
     metodo_origen = (data.get("metodo_origen") or "video_galeria").strip().lower()
@@ -71,10 +76,14 @@ def guardar_golpeo():
 
     try:
         payload = modelo.guardar_golpeo(id_usuario_int, data, metodo_origen=metodo_origen)
+        logger.info("[GOLPEO] Guardado: id_golpeo=%s id_usuario=%s metodo=%s",
+                    payload.get("id_golpeo"), id_usuario_int, metodo_origen)
         return jsonify(_serializar(payload)), 201
     except IntegrityError:
+        logger.error("[GOLPEO] Integridad BD al guardar golpeo para id_usuario=%s", id_usuario_int)
         return jsonify({"error": "Error de integridad en la base de datos"}), 409
     except Exception:
+        logger.exception("[GOLPEO] Error inesperado al guardar golpeo para id_usuario=%s", id_usuario_int)
         return jsonify({"error": "No se pudo guardar el golpeo"}), 500
 
 
@@ -106,8 +115,39 @@ def obtener(id_golpeo: int):
 def eliminar(id_golpeo: int):
     ok = modelo.eliminar(id_golpeo)
     if not ok:
+        logger.warning("[GOLPEO] Eliminacion fallida: id_golpeo=%s no encontrado", id_golpeo)
         return jsonify({"error": "Golpeo no encontrado"}), 404
+    logger.info("[GOLPEO] Eliminacion: id_golpeo=%s", id_golpeo)
     return jsonify({"mensaje": "Golpeo eliminado"})
+
+
+@futbol_db_bp.route("/api/golpeos/<int:id_golpeo>", methods=["PUT"])
+def actualizar_golpeo(id_golpeo: int):
+    """Actualiza campos editables de un golpeo existente (notas, metadatos)."""
+    row = modelo.obtener_por_id(id_golpeo)
+    if not row:
+        return jsonify({"error": "Golpeo no encontrado"}), 404
+
+    data = request.get_json(silent=True)
+    if not data:
+        return jsonify({"error": "Se esperaba JSON en el body"}), 400
+
+    campos_permitidos = {"notas", "pierna_golpeo", "metodo_origen"}
+    actualizacion = {k: v for k, v in data.items() if k in campos_permitidos}
+    if not actualizacion:
+        return jsonify({"error": f"Ningún campo editable. Permitidos: {sorted(campos_permitidos)}"}), 400
+
+    try:
+        ok = modelo.actualizar_golpeo(id_golpeo, actualizacion)
+    except Exception:
+        logger.exception("[GOLPEO] Error al actualizar id_golpeo=%s", id_golpeo)
+        return jsonify({"error": "No se pudo actualizar el golpeo"}), 500
+
+    if not ok:
+        return jsonify({"error": "No se pudo actualizar el golpeo"}), 500
+
+    logger.info("[GOLPEO] Actualizacion: id_golpeo=%s campos=%s", id_golpeo, list(actualizacion.keys()))
+    return jsonify({"mensaje": "Golpeo actualizado"})
 
 
 @futbol_db_bp.route("/api/videos", methods=["GET"])
