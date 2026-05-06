@@ -313,6 +313,19 @@ document.addEventListener('DOMContentLoaded', () => {
             data.items.forEach((u) => pintarFilaUsuario(u));
             usuariosOffset += data.items.length;
             usuariosHasMore = Boolean(data.has_more);
+
+            // Si es la carga inicial y el usuario activo estaba en la lista,
+            // restaurar su estado en UI una sola vez (sin llamarlo por cada fila).
+            if (reset && usuarioActivoData) {
+                const u = usuarioActivoData;
+                setUsuarioActivo({
+                    id_usuario: u.id_usuario,
+                    alias: u.alias,
+                    nombre_completo: u.nombre_completo || u.nombre || '',
+                    altura_m: u.altura_m,
+                    peso_kg: u.peso_kg,
+                });
+            }
         } catch (error) {
             setEstado(`No se pudo cargar usuarios: ${error.message}`, '#ff6b6b');
         } finally {
