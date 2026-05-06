@@ -14,11 +14,19 @@ function _validarAlturaObligatoria(alturaM) {
 }
 
 // Llama al backend y devuelve JSON con manejo de errores.
-async function fetchJsonFutbol(url, options = {}) {
+async function fetchJsonFutbol(url, options = {}, timeoutMs = 30000) {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), timeoutMs);
+    
     let respuesta;
     try {
-        respuesta = await fetch(url, options);
-    } catch (_error) {
+        respuesta = await fetch(url, { ...options, signal: controller.signal });
+        clearTimeout(timeout);
+    } catch (error) {
+        clearTimeout(timeout);
+        if (error.name === 'AbortError') {
+            throw new Error(`Timeout: sin respuesta del backend en ${timeoutMs}ms. Verifica que el servidor esté activo.`);
+        }
         const origen = window.location.origin || 'origen desconocido';
         throw new Error(
             `No hay conexion con el backend (${getFutbolBaseUrl()}). ` +
@@ -217,16 +225,33 @@ async function generarVideoAnotadoFutbol(videoBlob, opciones = {}) {
     }
 
     const url = `${getFutbolBaseUrl()}/api/futbol/video-anotado`;
-    const respuesta = await fetch(url, { method: 'POST', body: formData });
-    if (!respuesta.ok) {
-        let mensaje = `Error HTTP ${respuesta.status}`;
-        try {
-            const data = await respuesta.json();
-            mensaje = data.error || data.mensaje || mensaje;
-        } catch (_e) { /* ignore */ }
-        throw new Error(mensaje);
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 60000);  // 60s para procesamiento de video
+    
+    try {
+        const respuesta = await fetch(url, { 
+            method: 'POST', 
+            body: formData,
+            signal: controller.signal 
+        });
+        clearTimeout(timeout);
+        
+        if (!respuesta.ok) {
+            let mensaje = `Error HTTP ${respuesta.status}`;
+            try {
+                const data = await respuesta.json();
+                mensaje = data.error || data.mensaje || mensaje;
+            } catch (_e) { /* ignore */ }
+            throw new Error(mensaje);
+        }
+        return await respuesta.blob();
+    } catch (error) {
+        clearTimeout(timeout);
+        if (error.name === 'AbortError') {
+            throw new Error('Timeout: generación de video anotado excedió 60s. Intenta con un video más corto.');
+        }
+        throw error;
     }
-    return await respuesta.blob();
 }
 
 // ── Panel analítico de fútbol ──────────────────────────────────────────────
@@ -479,17 +504,22 @@ async function cargarAnaliticaFutbol({ mostrarErrores = false } = {}) {
     _asignarTextoFutbol('analitica-estado', 'Actualizando analitica...');
 
     try {
-        const [fatiga, tendencia, alertasPayload, avanzada] = await Promise.all([
+        const resultados = await Promise.allSettled([
             obtenerFatigaUsuarioFutbol(id, metrica),
             obtenerTendenciaUsuarioFutbol(id, metrica),
             obtenerAlertasTendenciaFutbol(id),
             obtenerAnaliticaAvanzadaFutbol(id, metrica)
         ]);
 
+        const fatiga = resultados[0].status === 'fulfilled' ? resultados[0].value : {};
+        const tendencia = resultados[1].status === 'fulfilled' ? resultados[1].value : {};
+        const alertasPayload = resultados[2].status === 'fulfilled' ? resultados[2].value : { alertas: [] };
+        const avanzada = resultados[3].status === 'fulfilled' ? resultados[3].value : {};
+
         _actualizarPanelAnaliticaFutbol(tendencia, fatiga, alertasPayload.alertas || []);
         _actualizarPanelAvanzadoFutbol(avanzada);
     } catch (err) {
-        _asignarTextoFutbol('analitica-estado', `No se pudo cargar la analitica: ${err.message}`);
+        _asignarTextoFutbol('analitica-estado', `Error cargando analitica: ${err.message}`);
         if (mostrarErrores && typeof mostrarToast === 'function') {
             mostrarToast(`Analitica: ${err.message}`, 'error', 3200);
         }

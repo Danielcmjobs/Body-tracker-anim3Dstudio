@@ -16,6 +16,8 @@ document.addEventListener('DOMContentLoaded', () => {
     // Estado del ultimo analisis aceptado (para acciones posteriores).
     let ultimoVideoBlob = null;
     let ultimoResultado = null;
+    // Histórico de los últimos 4 tiros de la sesión actual (en memoria).
+    const historialTiros = [];
     // Marca cada llamada a procesarVideo; descarta resultados de llamadas obsoletas.
     let analisisSeq = 0;
 
@@ -177,7 +179,14 @@ document.addEventListener('DOMContentLoaded', () => {
         setValor('data-velocidad-pie', formatearNumero(data.velocidad_pie_ms));
         setValor('data-frame-impacto', data.frame_impacto != null ? String(data.frame_impacto) : '--');
         setValor('data-asimetria', formatearNumero(data.asimetria_postura_pct));
-        setValor('data-apoyo-score', formatearNumero(data.apoyo && data.apoyo.score));
+        // Apoyo: dict con score, validar estructura
+        setValor('data-apoyo-score', data.apoyo && 
+            typeof data.apoyo === 'object' && 
+            data.apoyo.score != null &&
+            !Number.isNaN(Number(data.apoyo.score))
+            ? formatearNumero(data.apoyo.score)
+            : '--');
+        setValor('data-score-compuesto', formatearScore(data.score_compuesto));
         setValor('data-clasificacion', data.clasificacion || '--');
 
         pintarFases(data.fases);
@@ -185,6 +194,7 @@ document.addEventListener('DOMContentLoaded', () => {
         pintarCurvas(data.curvas);
         pintarVelocidades(data.velocidades_articulares, data.curvas && data.curvas.timestamps_s);
         prepararAcciones(data, videoBlob);
+        registrarTiroSesion(data);
 
         // Analítica del jugador (solo si hay usuario activo)
         const usuario = getUsuarioActivo();
@@ -347,34 +357,44 @@ document.addEventListener('DOMContentLoaded', () => {
                 obtenerComparativaUsuarioFutbol(idUsuario, 4),
             ]);
 
+            // Validar estructura de respuestas
+            fatiga = fatiga || {};
+            tendencia = tendencia || {};
+            comparativa = comparativa || {};
+
             setValor('data-fatiga', fatiga.fatiga_significativa
                 ? `Sí (-${formatearNumero(fatiga.caida_porcentual)}%)`
                 : (fatiga.numero_golpeos ? 'No' : '--'));
-            setValor('data-tendencia', tendencia.estado || '--');
+            setValor('data-tendencia', tendencia && tendencia.estado ? tendencia.estado : '--');
 
-            // Gráfico tendencia
+            // Gráfico tendencia: validar que historial es array
             const canvas = document.getElementById('grafico-tendencia');
-            if (canvas && typeof Chart !== 'undefined' && Array.isArray(tendencia.historial) && tendencia.historial.length) {
-                if (chartTendencia) { chartTendencia.destroy(); chartTendencia = null; }
+            // Destruir chart anterior antes de crear uno nuevo (evita memory leak)
+            if (chartTendencia) { 
+                chartTendencia.destroy(); 
+                chartTendencia = null; 
+            }
+            if (canvas && typeof Chart !== 'undefined' && tendencia && Array.isArray(tendencia.historial) && tendencia.historial.length) {
                 chartTendencia = new Chart(canvas.getContext('2d'), {
                     type: 'line',
                     data: {
-                        labels: tendencia.historial.map((p) => (p.fecha || '').slice(0, 10)),
+                        labels: (tendencia.historial || []).map((p) => p ? (p.fecha || '').slice(0, 10) : ''),
                         datasets: [
-                            { label: `Valor (${tendencia.unidad || ''})`, data: tendencia.historial.map((p) => p.valor), borderColor: '#2196F3', tension: 0.2 },
-                            { label: 'Tendencia', data: tendencia.historial.map((p) => p.tendencia_valor), borderColor: '#FF5722', borderDash: [5, 5], tension: 0 },
+                            { label: `Valor (${tendencia.unidad || ''})`, data: (tendencia.historial || []).map((p) => p ? p.valor : null), borderColor: '#2196F3', tension: 0.2 },
+                            { label: 'Tendencia', data: (tendencia.historial || []).map((p) => p ? p.tendencia_valor : null), borderColor: '#FF5722', borderDash: [5, 5], tension: 0 },
                         ]
                     },
                     options: { responsive: true, animation: false }
                 });
             }
 
-            // Tabla comparativa
+            // Tabla comparativa: validar que golpeos es array
             const tbody = document.getElementById('tbody-comparativa');
             if (tbody) {
                 tbody.innerHTML = '';
-                const items = (comparativa && comparativa.golpeos) || [];
+                const items = (comparativa && Array.isArray(comparativa.golpeos) ? comparativa.golpeos : []);
                 items.forEach((g, i) => {
+                    if (!g) return;
                     const tr = document.createElement('tr');
                     tr.innerHTML = `
                         <td>${i + 1}</td>
@@ -395,6 +415,50 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
+    // Registra el tiro en el historial de sesión (máx. 4) y actualiza la tabla.
+    function registrarTiroSesion(data) {
+        historialTiros.push({
+            score_compuesto: data.score_compuesto,
+            velocidad_pie_ms: data.velocidad_pie_ms,
+            estabilidad_tronco: data.estabilidad_tronco,
+            angulo_cadera_deg: data.angulo_cadera_deg,
+            angulo_rodilla_deg: data.angulo_rodilla_deg,
+            angulo_tobillo_deg: data.angulo_tobillo_deg,
+            clasificacion: data.clasificacion,
+        });
+        if (historialTiros.length > 4) {
+            historialTiros.shift();
+        }
+        actualizarComparativaSesion();
+    }
+
+    // Pinta la tabla de comparativa de la sesión.
+    function actualizarComparativaSesion() {
+        const panel = document.getElementById('panel-comparativa-sesion');
+        const tbody = document.getElementById('tbody-comparativa-sesion');
+        if (!panel || !tbody) return;
+
+        tbody.innerHTML = '';
+        historialTiros.forEach((t, i) => {
+            const tr = document.createElement('tr');
+            const esMejor = t.score_compuesto != null &&
+                historialTiros.every((o, j) => j === i || o.score_compuesto == null || t.score_compuesto >= o.score_compuesto);
+            if (esMejor && historialTiros.length > 1) tr.className = 'fila-mejor';
+            tr.innerHTML = `
+                <td>${i + 1}</td>
+                <td>${formatearScore(t.score_compuesto)}</td>
+                <td>${formatearNumero(t.velocidad_pie_ms)}</td>
+                <td>${formatearNumero(t.estabilidad_tronco)}</td>
+                <td>${formatearGrados(t.angulo_cadera_deg)}</td>
+                <td>${formatearGrados(t.angulo_rodilla_deg)}</td>
+                <td>${formatearGrados(t.angulo_tobillo_deg)}</td>
+                <td>${t.clasificacion || '--'}</td>`;
+            tbody.appendChild(tr);
+        });
+
+        panel.style.display = historialTiros.length > 0 ? 'block' : 'none';
+    }
+
     // Escribe un valor en el elemento indicado.
     function setValor(id, valor) {
         const nodo = document.getElementById(id);
@@ -403,20 +467,28 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    // Formatea numeros con dos decimales o placeholder.
-    function formatearNumero(valor) {
+    // Helpers robustos de formateo
+    function formatearNumero(valor, decimales = 2) {
         if (valor === null || valor === undefined || Number.isNaN(Number(valor))) {
             return '--';
         }
-        return Number(valor).toFixed(2);
+        return Number(valor).toFixed(decimales);
     }
 
-    // Formatea angulos en grados con un decimal.
     function formatearGrados(valor) {
         if (valor === null || valor === undefined || Number.isNaN(Number(valor))) {
             return '-- deg';
         }
         return `${Number(valor).toFixed(1)} deg`;
+    }
+
+    // Helper defensivo para score compuesto (0-100 o --)
+    function formatearScore(score) {
+        if (score === null || score === undefined || Number.isNaN(Number(score))) {
+            return '--';
+        }
+        const s = Number(score);
+        return s >= 0 && s <= 100 ? formatearNumero(s, 1) : '--';
     }
 
     if (btnGrabar) {
@@ -462,9 +534,15 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     // Panel analítico — carga al seleccionar usuario
-    document.addEventListener('usuarioSeleccionCambio', () => {
+    // Crear handler nombrado para evitar duplicados al navegar
+    const handleUsuarioChange = () => {
+        historialTiros.length = 0;  // LIMPIAR historial del usuario anterior
+        actualizarComparativaSesion();  // Redibuja tabla vacía
         cargarAnaliticaFutbol().catch(() => {});
-    });
+    };
+    // Remover listener anterior si existe (evita duplicados)
+    document.removeEventListener('usuarioSeleccionCambio', handleUsuarioChange);
+    document.addEventListener('usuarioSeleccionCambio', handleUsuarioChange);
 
     // Panel analítico — botón manual de actualizar
     const btnActAnalitica = document.getElementById('btn-actualizar-analitica');
@@ -473,6 +551,15 @@ document.addEventListener('DOMContentLoaded', () => {
             cargarAnaliticaFutbol({ mostrarErrores: true }).catch(() => {});
         });
     }
+
+    // Cleanup: remover listeners y destruir charts al abandonar página
+    window.addEventListener('beforeunload', () => {
+        document.removeEventListener('usuarioSeleccionCambio', handleUsuarioChange);
+        if (chartTendencia) {
+            chartTendencia.destroy();
+            chartTendencia = null;
+        }
+    });
 
     // Panel analítico — cambio de métrica
     const selectMetrica = document.getElementById('metrica-analitica');

@@ -2,6 +2,7 @@
 MODELO — Acceso a datos de la tabla `usuarios` para el modulo futbol.
 """
 
+import threading
 from models.db import get_connection
 
 
@@ -9,6 +10,7 @@ class UsuarioModel:
     """CRUD para la tabla usuarios."""
 
     _cache_tiene_peso_kg: bool | None = None
+    _cache_lock = threading.Lock()
 
     @classmethod
     def _tiene_columna_peso_kg(cls, cur) -> bool:
@@ -16,16 +18,21 @@ class UsuarioModel:
         if cls._cache_tiene_peso_kg is not None:
             return cls._cache_tiene_peso_kg
 
-        cur.execute(
-            "SELECT COUNT(*) AS total "
-            "FROM INFORMATION_SCHEMA.COLUMNS "
-            "WHERE TABLE_SCHEMA = DATABASE() "
-            "AND TABLE_NAME = 'usuarios' "
-            "AND COLUMN_NAME = 'peso_kg'"
-        )
-        row = cur.fetchone() or {"total": 0}
-        cls._cache_tiene_peso_kg = int(row.get("total", 0)) > 0
-        return cls._cache_tiene_peso_kg
+        with cls._cache_lock:
+            # Double-check pattern
+            if cls._cache_tiene_peso_kg is not None:
+                return cls._cache_tiene_peso_kg
+
+            cur.execute(
+                "SELECT COUNT(*) AS total "
+                "FROM INFORMATION_SCHEMA.COLUMNS "
+                "WHERE TABLE_SCHEMA = DATABASE() "
+                "AND TABLE_NAME = 'usuarios' "
+                "AND COLUMN_NAME = 'peso_kg'"
+            )
+            row = cur.fetchone() or {"total": 0}
+            cls._cache_tiene_peso_kg = int(row.get("total", 0)) > 0
+            return cls._cache_tiene_peso_kg
 
     @classmethod
     def _select_campos_usuario(cls, incluir_peso: bool) -> str:

@@ -13,7 +13,7 @@ Orquesta el pipeline de análisis biomecánico de un golpeo:
 from __future__ import annotations
 
 from models.video_processor import VideoProcessor
-from services.calculo_service import CalculoService
+from services.calculo_service import CalculoService, calcular_score_compuesto
 from services.impacto_service import (
     detectar_pierna_golpeo_apoyo,
     calcular_velocidad_pie,
@@ -112,6 +112,7 @@ class FutbolController:
         respuesta["alertas"] = alertas
         respuesta["clasificacion"] = clasif
         respuesta["observaciones"] = observ
+        respuesta["score_compuesto"] = calcular_score_compuesto(respuesta)
 
         if incluir_landmarks:
             respuesta["landmarks_frames"] = landmarks_frames

@@ -132,7 +132,7 @@ def actualizar_golpeo(id_golpeo: int):
     if not data:
         return jsonify({"error": "Se esperaba JSON en el body"}), 400
 
-    campos_permitidos = {"notas", "pierna_golpeo", "metodo_origen"}
+    campos_permitidos = {"pierna_golpeo", "metodo_origen"}
     actualizacion = {k: v for k, v in data.items() if k in campos_permitidos}
     if not actualizacion:
         return jsonify({"error": f"Ningún campo editable. Permitidos: {sorted(campos_permitidos)}"}), 400

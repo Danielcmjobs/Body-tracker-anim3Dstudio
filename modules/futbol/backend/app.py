@@ -102,7 +102,11 @@ def analizar_golpeo():
     guardar_bd = request.form.get("guardar_bd", "false").strip().lower() in {"1", "true", "si", "yes"}
     guardar_bd = guardar_bd or guardar_video_bd
 
-    if guardar_bd and id_usuario:
+    if guardar_bd:
+        # Validar que id_usuario es obligatorio si se va a guardar
+        if not id_usuario or str(id_usuario).strip() == '':
+            return jsonify({"error": "id_usuario es obligatorio cuando se guarda en BD"}), 400
+        
         try:
             id_usuario_int = int(id_usuario)
         except (ValueError, TypeError):

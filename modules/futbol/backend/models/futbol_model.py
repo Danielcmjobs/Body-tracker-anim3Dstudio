@@ -26,10 +26,11 @@ from utils.serializers import normalizar_float
 # Campos expuestos por la vista v_golpeos en orden estable.
 _CAMPOS_VGOLPEOS = (
     "id_golpeo, id_usuario, id_sesion, fecha_golpeo, metodo_origen, "
-    "confianza_ia, confianza, pierna_golpeo, pierna_apoyo, "
-    "velocidad_pie_ms, frame_impacto, angulo_cadera_deg, "
-    "angulo_rodilla_deg, angulo_tobillo_deg, estabilidad_tronco, "
-    "clasificacion"
+    "confianza_ia, confianza, fps, ancho_px, alto_px, "
+    "pierna_golpeo, pierna_apoyo, velocidad_pie_ms, frame_impacto, "
+    "angulo_cadera_deg, angulo_rodilla_deg, angulo_tobillo_deg, "
+    "estabilidad_tronco, oscilacion_tronco_px, tiempo_estabilizacion_s, "
+    "asimetria_postura_pct, score_compuesto, clasificacion"
 )
 
 
@@ -49,6 +50,8 @@ class FutbolModel:
             "metodo_origen": metodo_origen,
             "velocidad_pie_ms": normalizar_float(data.get("velocidad_pie_ms")),
             "frame_impacto": _safe_int(data.get("frame_impacto")),
+            "asimetria_postura_pct": normalizar_float(data.get("asimetria_postura_pct")),
+            "score_compuesto": normalizar_float(data.get("score_compuesto")),
             "clasificacion": data.get("clasificacion"),
             "curvas_json": data.get("curvas"),
             "alertas_json": data.get("alertas"),
@@ -67,8 +70,8 @@ class FutbolModel:
                 "INSERT INTO gestos_futbol "
                 "(id_gesto, pierna_golpeo, pierna_apoyo, velocidad_pie_ms, frame_impacto, "
                 " angulo_cadera_deg, angulo_rodilla_deg, angulo_tobillo_deg, "
-                " estabilidad_tronco, clasificacion) "
-                "VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)",
+                " estabilidad_tronco, asimetria_postura_pct, score_compuesto, clasificacion) "
+                "VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)",
                 (
                     id_gesto,
                     _enum_pierna(payload["pierna_golpeo"]),
@@ -79,6 +82,8 @@ class FutbolModel:
                     payload["angulo_rodilla_deg"],
                     payload["angulo_tobillo_deg"],
                     payload["estabilidad_tronco"],
+                    payload["asimetria_postura_pct"],
+                    payload["score_compuesto"],
                     payload["clasificacion"],
                 ),
             )
@@ -195,8 +200,8 @@ class FutbolModel:
             return cursor.rowcount > 0
 
     def actualizar_golpeo(self, id_golpeo: int, campos: dict) -> bool:
-        """Actualiza campos editables de un golpeo. Solo permite: notas, pierna_golpeo, metodo_origen."""
-        _permitidos = {"notas", "pierna_golpeo", "metodo_origen"}
+        """Actualiza campos editables de un golpeo. Solo permite: pierna_golpeo, metodo_origen."""
+        _permitidos = {"pierna_golpeo", "metodo_origen"}
         seguros = {k: v for k, v in campos.items() if k in _permitidos}
         if not seguros:
             return False
@@ -204,7 +209,7 @@ class FutbolModel:
         valores = list(seguros.values()) + [id_golpeo]
         with get_connection() as (conn, cursor):
             cursor.execute(
-                f"UPDATE gestos_futbol SET {set_clause} WHERE id_golpeo = %s",
+                f"UPDATE gestos_futbol SET {set_clause} WHERE id_gesto = %s",
                 valores,
             )
             return cursor.rowcount > 0

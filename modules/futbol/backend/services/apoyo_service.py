@@ -110,7 +110,7 @@ def asimetria_postura(frames) -> float | None:
             referencia.append(abs(f.cadera_izq[1] - f.hombro_izq[1]))
         if f.hombro_der and f.cadera_der:
             referencia.append(abs(f.cadera_der[1] - f.hombro_der[1]))
-    if not referencia:
+    if not referencia or len(referencia) == 0:
         return None
 
     ref_media = sum(referencia) / len(referencia)

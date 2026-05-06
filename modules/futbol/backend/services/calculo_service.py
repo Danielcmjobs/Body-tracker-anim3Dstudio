@@ -5,6 +5,40 @@ Calcula metricas del golpeo de futbol a partir de los landmarks.
 import statistics
 
 from services.biomecanica_service import angulo_3p, mid_point
+from config import SCORE_PESOS_GOLPEO, SCORE_RANGOS_GOLPEO
+
+
+def calcular_score_compuesto(metricas: dict) -> float | None:
+    """Calcula el score compuesto de ejecución (0..100) a partir de las métricas.
+
+    Normaliza cada métrica al rango [min, max] definido en SCORE_RANGOS_GOLPEO,
+    la pondera con SCORE_PESOS_GOLPEO y acumula. Devuelve None si faltan datos críticos.
+    """
+    pesos = SCORE_PESOS_GOLPEO
+    rangos = SCORE_RANGOS_GOLPEO
+
+    # Normalizar pesos para que sumen 1.0
+    total_pesos = sum(pesos.values()) or 1.0
+
+    acumulado = 0.0
+    peso_usado = 0.0
+    for metrica, peso in pesos.items():
+        valor = metricas.get(metrica)
+        if valor is None:
+            continue
+        rmin, rmax = rangos.get(metrica, (0.0, 1.0))
+        rango = rmax - rmin
+        if rango <= 0:
+            continue
+        norm = max(0.0, min(1.0, (float(valor) - rmin) / rango))
+        acumulado += (peso / total_pesos) * norm
+        peso_usado += peso / total_pesos
+
+    if peso_usado < 0.1:
+        return None
+    # Escalar al peso realmente disponible para no penalizar métricas ausentes
+    score = (acumulado / peso_usado) * 100.0
+    return round(score, 1)
 
 
 class CalculoService:
