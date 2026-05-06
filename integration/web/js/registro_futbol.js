@@ -203,6 +203,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (reset) {
             usuariosOffset = 0;
             usuariosHasMore = true;
+            usuarioActivoData = null;
             tablaBody.innerHTML = '';
         }
 

@@ -29,20 +29,28 @@ async function obtenerUsuariosPaginados({ search = '', limit = 20, offset = 0 } 
 }
 
 function setUsuarioActivo(usuario) {
+    const nombreCompleto = usuario.nombre_completo || usuario.nombre || '';
+    const altura = (usuario.altura_m !== undefined && usuario.altura_m !== null && String(usuario.altura_m).trim() !== '')
+        ? Number(usuario.altura_m)
+        : null;
+    const peso = (usuario.peso_kg !== undefined && usuario.peso_kg !== null && String(usuario.peso_kg).trim() !== '')
+        ? Number(usuario.peso_kg)
+        : null;
+
     sessionStorage.setItem('idUser', String(usuario.id_usuario));
-    sessionStorage.setItem('aliasUser', usuario.alias);
-    sessionStorage.setItem('nombreUser', usuario.nombre_completo);
-    sessionStorage.setItem('alturaUser', String(usuario.altura_m));
-    sessionStorage.setItem('pesoUser', usuario.peso_kg != null ? String(usuario.peso_kg) : '');
+    sessionStorage.setItem('aliasUser', usuario.alias || '');
+    sessionStorage.setItem('nombreUser', nombreCompleto);
+    sessionStorage.setItem('alturaUser', altura != null ? String(altura) : '');
+    sessionStorage.setItem('pesoUser', peso != null ? String(peso) : '');
 
     const alturaInput = document.getElementById('altura-usuario');
     if (alturaInput) {
-        alturaInput.value = usuario.altura_m;
+        alturaInput.value = altura != null ? String(altura) : '';
     }
 
     const estado = document.getElementById('usuario-estado');
     if (estado) {
-        estado.textContent = `Usuario activo: ${usuario.alias} (ID ${usuario.id_usuario})`;
+        estado.textContent = `Usuario activo: ${usuario.alias || '-'} (ID ${usuario.id_usuario})`;
         estado.style.color = '#34c759';
     }
 
@@ -272,9 +280,9 @@ document.addEventListener('DOMContentLoaded', () => {
             setUsuarioActivo({
                 id_usuario: u.id_usuario,
                 alias: u.alias,
-                nombre_completo: u.nombre_completo,
-                altura_m: Number(u.altura_m),
-                peso_kg: u.peso_kg != null ? Number(u.peso_kg) : null,
+                nombre_completo: u.nombre_completo || '',
+                altura_m: (u.altura_m !== undefined && u.altura_m !== null && String(u.altura_m).trim() !== '') ? Number(u.altura_m) : null,
+                peso_kg: (u.peso_kg !== undefined && u.peso_kg !== null && String(u.peso_kg).trim() !== '') ? Number(u.peso_kg) : null,
             });
         });
 
@@ -297,6 +305,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (reset) {
             usuariosOffset = 0;
             usuariosHasMore = true;
+            usuarioActivoData = null;
             tablaBody.innerHTML = '';
         }
 
