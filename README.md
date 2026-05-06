@@ -21,7 +21,7 @@ Documentación detallada en [`docs/`](docs/).
 | **Módulo 1 — Sensor Arduino** | ✅ Completado | Mide distancia con HC-SR04, expone los datos via API REST |
 | **Módulo 2 — Salto con móvil** | ✅ Backend completado | Analiza vídeo con MediaPipe, calcula salto vertical/horizontal, análisis biomecánico completo |
 | **Módulo 3 — Futbol con móvil** | ✅ Backend inicial | Analiza vídeo con MediaPipe, calcula métricas de golpeo |
-| **Base de datos** | ✅ Completada | MySQL — CRUD usuarios/saltos, progreso y comparativa |
+| **Base de datos** | ✅ Unificada (`bd_anim3d`) | MySQL — esquema único compartido por salto y futbol. Ver [`scripts/README_BBDD_UNIFICADA.md`](scripts/README_BBDD_UNIFICADA.md) |
 | **Integración web** | ✅ Completada | Frontend web unificado (landing + salto + futbol + sensor) |
 
 ---

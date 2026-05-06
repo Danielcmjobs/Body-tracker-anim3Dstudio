@@ -2,6 +2,10 @@
 
 Script de arranque para todo el proyecto.
 
+> 🗄️ **Base de datos unificada**: ver [`README_BBDD_UNIFICADA.md`](README_BBDD_UNIFICADA.md)
+> para el esquema compartido `bd_anim3d`, scripts SQL (`init_db_unificada.sql`,
+> `migrate_to_unified.sql`) y procedimiento de migración / rollback.
+
 ## Arranque completo
 
 | Script | Plataforma | Qué hace |

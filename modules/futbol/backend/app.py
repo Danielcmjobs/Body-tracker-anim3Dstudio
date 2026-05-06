@@ -25,6 +25,7 @@ from config import (
 from controllers.futbol_controller import FutbolController
 from controllers.futbol_db_controller import futbol_db_bp
 from controllers.usuarios_futbol_controller import usuarios_futbol_bp
+from controllers.usuario_controller import usuarios_bp
 from models.futbol_model import FutbolModel
 from models.usuarios_futbol_model import UsuariosFutbolModel
 from services.video_anotado_service import generar_video_anotado
@@ -41,6 +42,7 @@ CORS(app, origins=CORS_ORIGINS)
 
 app.register_blueprint(futbol_db_bp)
 app.register_blueprint(usuarios_futbol_bp)
+app.register_blueprint(usuarios_bp)
 
 controller = FutbolController()
 modelo_futbol = FutbolModel()
