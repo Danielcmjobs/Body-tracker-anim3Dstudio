@@ -223,8 +223,23 @@ def alertas_golpeo(id_golpeo: int):
 # LEGACY — Rutas deprecadas de analítica de usuario.
 # Mantener temporalmente por compatibilidad con clientes antiguos.
 # Usar en su lugar: /api/usuarios/<id>/fatiga|tendencia|comparativa
-# Fecha prevista de retirada: Fase 5 del roadmap de paridad.
+# Fecha prevista de retirada: 2026-08-01 (Fase 5 del roadmap de paridad).
 # ─────────────────────────────────────────────────────────────
+
+_DEPRECATION_HEADERS = {
+    "Deprecation": "version=\"2026-08-01\"",
+    "Sunset": "Sat, 01 Aug 2026 00:00:00 GMT",
+    "Link": '</api/usuarios/{id}/fatiga>; rel="successor-version"',
+}
+
+
+def _legacy_response(data):
+    """Envuelve una respuesta JSON añadiendo cabeceras de deprecación."""
+    resp = jsonify(data)
+    for k, v in _DEPRECATION_HEADERS.items():
+        resp.headers[k] = v
+    return resp
+
 
 @app.route("/api/usuarios_futbol/<int:id_usuario>/fatiga", methods=["GET"])
 def fatiga_usuario(id_usuario: int):
@@ -232,7 +247,7 @@ def fatiga_usuario(id_usuario: int):
     if err:
         return err
     metrica = (request.args.get("metrica") or "velocidad_pie_ms").strip()
-    return jsonify(calcular_fatiga_intra_sesion(_golpeos_serializados(id_usuario, "ASC"), metrica=metrica))
+    return _legacy_response(calcular_fatiga_intra_sesion(_golpeos_serializados(id_usuario, "ASC"), metrica=metrica))
 
 
 @app.route("/api/usuarios_futbol/<int:id_usuario>/tendencia", methods=["GET"])
@@ -245,7 +260,7 @@ def tendencia_usuario(id_usuario: int):
         semanas = float(request.args.get("semanas", "4"))
     except (TypeError, ValueError):
         semanas = 4.0
-    return jsonify(calcular_tendencia(
+    return _legacy_response(calcular_tendencia(
         _golpeos_serializados(id_usuario, "ASC"),
         semanas_prediccion=semanas,
         metrica=metrica,
@@ -261,7 +276,7 @@ def comparativa_usuario(id_usuario: int):
         n = int(request.args.get("n", "4"))
     except (TypeError, ValueError):
         n = 4
-    return jsonify(calcular_comparativa(_golpeos_serializados(id_usuario, "DESC"), n=n))
+    return _legacy_response(calcular_comparativa(_golpeos_serializados(id_usuario, "DESC"), n=n))
 
 
 def _validar_usuario(id_usuario: int):

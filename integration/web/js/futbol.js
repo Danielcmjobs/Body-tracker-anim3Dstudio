@@ -461,6 +461,27 @@ document.addEventListener('DOMContentLoaded', () => {
         btnVideoAnotado.addEventListener('click', generarYMostrarVideoAnotado);
     }
 
+    // Panel analítico — carga al seleccionar usuario
+    document.addEventListener('usuarioSeleccionCambio', () => {
+        cargarAnaliticaFutbol().catch(() => {});
+    });
+
+    // Panel analítico — botón manual de actualizar
+    const btnActAnalitica = document.getElementById('btn-actualizar-analitica');
+    if (btnActAnalitica) {
+        btnActAnalitica.addEventListener('click', () => {
+            cargarAnaliticaFutbol({ mostrarErrores: true }).catch(() => {});
+        });
+    }
+
+    // Panel analítico — cambio de métrica
+    const selectMetrica = document.getElementById('metrica-analitica');
+    if (selectMetrica) {
+        selectMetrica.addEventListener('change', () => {
+            cargarAnaliticaFutbol().catch(() => {});
+        });
+    }
+
     // Asegura que la camara se libere al salir.
     window.addEventListener('beforeunload', () => {
         detenerCamara();

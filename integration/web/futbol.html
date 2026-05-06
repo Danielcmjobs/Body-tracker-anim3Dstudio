@@ -87,6 +87,85 @@
         <div id="usuario-estado" class="sensor-nota">Sin usuario activo.</div>
         <a href="futbol_videos.html" class="sensor-btn secondary-btn biblioteca-link">Abrir biblioteca de videos</a>
 
+        <div class="analitica-panel">
+            <div class="analitica-header">
+                <h3 class="analitica-titulo">Evolucion y fatiga</h3>
+                <div class="analitica-tools">
+                    <select id="metrica-analitica" class="modern-input analitica-select">
+                        <option value="velocidad_pie_ms" selected>Velocidad pie</option>
+                        <option value="estabilidad_tronco">Estabilidad</option>
+                        <option value="angulo_rodilla_deg">Ang. Rodilla</option>
+                    </select>
+                    <button id="btn-actualizar-analitica" class="sensor-btn ghost-btn analitica-refresh" type="button">Actualizar</button>
+                </div>
+            </div>
+
+            <p id="analitica-estado" class="sensor-nota">Selecciona un usuario para ver su tendencia.</p>
+
+            <div id="fatiga-alerta" class="fatiga-alerta" style="display:none;"></div>
+            <div id="alertas-tendencia" class="alertas-tendencia" style="display:none;"></div>
+
+            <div class="analitica-metricas">
+                <div class="metrica-item">
+                    <span class="metrica-label">Pendiente historial</span>
+                    <strong id="metrica-pendiente-historial">-- m/s/sem</strong>
+                </div>
+                <div class="metrica-item">
+                    <span class="metrica-label">R²</span>
+                    <strong id="metrica-r2">--</strong>
+                </div>
+                <div class="metrica-item">
+                    <span class="metrica-label">Prediccion 4 semanas</span>
+                    <strong id="metrica-prediccion">-- m/s</strong>
+                </div>
+                <div class="metrica-item">
+                    <span class="metrica-label">Estado</span>
+                    <strong id="metrica-estado">--</strong>
+                </div>
+                <div class="metrica-item">
+                    <span class="metrica-label">Pendiente sesion</span>
+                    <strong id="metrica-pendiente-sesion">-- m/s/golpeo</strong>
+                </div>
+                <div class="metrica-item">
+                    <span class="metrica-label">Caida sesion</span>
+                    <strong id="metrica-caida">--%</strong>
+                </div>
+            </div>
+
+            <div class="analitica-grafica-wrap" id="wrap-grafica-tendencia">
+                <canvas id="grafica-tendencia"></canvas>
+            </div>
+
+            <div class="analitica-grafica-wrap analitica-grafica-wrap-advanced" id="wrap-grafica-corr-vel-estab">
+                <p class="analitica-grafica-title">Correlacion velocidad vs estabilidad</p>
+                <canvas id="grafica-corr-vel-estab"></canvas>
+                <p id="empty-grafica-corr-vel-estab" class="analitica-empty-text" style="display:none;">No hay muestras suficientes para esta correlacion.</p>
+            </div>
+
+            <div class="analitica-avanzada-grid">
+                <div class="metrica-item metrica-item-wide">
+                    <span class="metrica-label">Comparativa sesiones</span>
+                    <strong id="sesiones-resumen">--</strong>
+                </div>
+                <div class="metrica-item metrica-item-wide">
+                    <span class="metrica-label">Correlaciones</span>
+                    <strong id="correlaciones-resumen">--</strong>
+                </div>
+                <div class="metrica-item metrica-item-wide">
+                    <span class="metrica-label">Estancamiento / mejora</span>
+                    <strong id="estancamiento-resumen">--</strong>
+                </div>
+                <div class="metrica-item metrica-item-wide">
+                    <span class="metrica-label">Prediccion multivariable</span>
+                    <strong id="prediccion-multi-resumen">--</strong>
+                </div>
+                <div class="metrica-item metrica-item-wide">
+                    <span class="metrica-label">Ranking sesiones</span>
+                    <strong id="ranking-resumen">--</strong>
+                </div>
+            </div>
+        </div>
+
         <h2 class="panel-title">Resultados del golpeo</h2>
         <p class="sensor-nota">Graba o sube un video para obtener las metricas.</p>
 
@@ -211,12 +290,12 @@
         </div>
     </section>
 
-    <script src="js/config.js?v=20260506c"></script>
+    <script src="js/config.js?v=20260506d"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
-    <script src="js/api-client.js?v=20260506c"></script>
-    <script src="js/api_futbol.js?v=20260506c"></script>
-    <script src="js/registro_futbol.js?v=20260506c"></script>
-    <script src="js/futbol.js?v=20260506c"></script>
+    <script src="js/api-client.js?v=20260506d"></script>
+    <script src="js/api_futbol.js?v=20260506d"></script>
+    <script src="js/registro_futbol.js?v=20260506d"></script>
+    <script src="js/futbol.js?v=20260506d"></script>
     <script type="module" src="js/futbol_landmarks.js?v=20260506c"></script>
 </body>
 </html>
