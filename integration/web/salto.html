@@ -94,8 +94,10 @@
                 <input type="text" id="nuevo-nombre" class="modern-input" placeholder="Nombre completo" maxlength="120">
                 <input type="number" id="nuevo-altura" class="modern-input" placeholder="Altura (1.75)" step="0.01" min="0.5" max="2.5">
                 <input type="number" id="nuevo-peso" class="modern-input" placeholder="Peso kg (opcional)" step="0.1" min="20" max="300">
-                <button id="btn-crear-usuario-inline" class="sensor-btn secondary-btn" type="button">Crear usuario</button>
-                <button id="btn-cancelar-edicion" class="sensor-btn ghost-btn" type="button" style="display:none;">Cancelar edición</button>
+                <div class="form-actions">
+                    <button id="btn-crear-usuario-inline" class="btn-accion" type="button">Guardar usuario</button>
+                    <button id="btn-cancelar-edicion" class="btn-accion btn-secondary" type="button" style="display:none;">Cancelar edición</button>
+                </div>
             </div>
 
             <div id="usuario-estado" class="sensor-nota">Sin usuario activo.</div>
