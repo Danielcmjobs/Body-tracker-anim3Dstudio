@@ -4,9 +4,9 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Analizador de golpeo</title>
-    <link rel="stylesheet" href="css/style.css?v=20260409b">
+    <link rel="stylesheet" href="css/style.css?v=20260507e">
 </head>
-<body class="salto-page futbol-page">
+<body class="salto-page">
     <div id="toast-aviso" class="toast-aviso" aria-live="polite"></div>
 
     <header class="top-bar">
@@ -14,8 +14,18 @@
         <h1 class="header-title">Analizador de golpeo</h1>
     </header>
 
+    <section class="pre-camera-controls">
+        <label for="modo-analisis" class="pre-camera-label">Modo</label>
+        <select id="modo-analisis" class="modern-input">
+            <option value="individual" selected>Tiro individual</option>
+            <option value="comparativa">Tiros comparativa (4 tiros)</option>
+        </select>
+        <p class="sensor-nota">En modo comparativa, el sistema agrupa 4 tiros consecutivos de la misma sesión y muestra la tabla de comparación.</p>
+    </section>
+
     <main class="camera-wrapper">
         <div id="indicador-ia">Cargando Motor...</div>
+        <div id="comparativa-progreso" class="comparativa-progreso" style="display:none;"></div>
         <video id="vista-camara" autoplay playsinline muted></video>
         <canvas id="canvas-esqueleto"></canvas>
     </main>
@@ -87,85 +97,6 @@
         <div id="usuario-estado" class="sensor-nota">Sin usuario activo.</div>
         <a href="futbol_videos.html" class="sensor-btn secondary-btn biblioteca-link">Abrir biblioteca de videos</a>
 
-        <div class="analitica-panel">
-            <div class="analitica-header">
-                <h3 class="analitica-titulo">Evolucion y fatiga</h3>
-                <div class="analitica-tools">
-                    <select id="metrica-analitica" class="modern-input analitica-select">
-                        <option value="velocidad_pie_ms" selected>Velocidad pie</option>
-                        <option value="estabilidad_tronco">Estabilidad</option>
-                        <option value="angulo_rodilla_deg">Ang. Rodilla</option>
-                    </select>
-                    <button id="btn-actualizar-analitica" class="sensor-btn ghost-btn analitica-refresh" type="button">Actualizar</button>
-                </div>
-            </div>
-
-            <p id="analitica-estado" class="sensor-nota">Selecciona un usuario para ver su tendencia.</p>
-
-            <div id="fatiga-alerta" class="fatiga-alerta" style="display:none;"></div>
-            <div id="alertas-tendencia" class="alertas-tendencia" style="display:none;"></div>
-
-            <div class="analitica-metricas">
-                <div class="metrica-item">
-                    <span class="metrica-label">Pendiente historial</span>
-                    <strong id="metrica-pendiente-historial">-- m/s/sem</strong>
-                </div>
-                <div class="metrica-item">
-                    <span class="metrica-label">R²</span>
-                    <strong id="metrica-r2">--</strong>
-                </div>
-                <div class="metrica-item">
-                    <span class="metrica-label">Prediccion 4 semanas</span>
-                    <strong id="metrica-prediccion">-- m/s</strong>
-                </div>
-                <div class="metrica-item">
-                    <span class="metrica-label">Estado</span>
-                    <strong id="metrica-estado">--</strong>
-                </div>
-                <div class="metrica-item">
-                    <span class="metrica-label">Pendiente sesion</span>
-                    <strong id="metrica-pendiente-sesion">-- m/s/golpeo</strong>
-                </div>
-                <div class="metrica-item">
-                    <span class="metrica-label">Caida sesion</span>
-                    <strong id="metrica-caida">--%</strong>
-                </div>
-            </div>
-
-            <div class="analitica-grafica-wrap" id="wrap-grafica-tendencia">
-                <canvas id="grafica-tendencia"></canvas>
-            </div>
-
-            <div class="analitica-grafica-wrap analitica-grafica-wrap-advanced" id="wrap-grafica-corr-vel-estab">
-                <p class="analitica-grafica-title">Correlacion velocidad vs estabilidad</p>
-                <canvas id="grafica-corr-vel-estab"></canvas>
-                <p id="empty-grafica-corr-vel-estab" class="analitica-empty-text" style="display:none;">No hay muestras suficientes para esta correlacion.</p>
-            </div>
-
-            <div class="analitica-avanzada-grid">
-                <div class="metrica-item metrica-item-wide">
-                    <span class="metrica-label">Comparativa sesiones</span>
-                    <strong id="sesiones-resumen">--</strong>
-                </div>
-                <div class="metrica-item metrica-item-wide">
-                    <span class="metrica-label">Correlaciones</span>
-                    <strong id="correlaciones-resumen">--</strong>
-                </div>
-                <div class="metrica-item metrica-item-wide">
-                    <span class="metrica-label">Estancamiento / mejora</span>
-                    <strong id="estancamiento-resumen">--</strong>
-                </div>
-                <div class="metrica-item metrica-item-wide">
-                    <span class="metrica-label">Prediccion multivariable</span>
-                    <strong id="prediccion-multi-resumen">--</strong>
-                </div>
-                <div class="metrica-item metrica-item-wide">
-                    <span class="metrica-label">Ranking sesiones</span>
-                    <strong id="ranking-resumen">--</strong>
-                </div>
-            </div>
-        </div>
-
         <h2 class="panel-title">Resultados del golpeo</h2>
         <p class="sensor-nota">Graba o sube un video para obtener las metricas.</p>
 
@@ -215,10 +146,6 @@
                 <span id="data-apoyo-score" class="data-value">--</span>
             </div>
             <div class="data-box">
-                <span class="data-label">Score compuesto</span>
-                <span id="data-score-compuesto" class="data-value">--</span>
-            </div>
-            <div class="data-box">
                 <span class="data-label">Clasificación</span>
                 <span id="data-clasificacion" class="data-value">--</span>
             </div>
@@ -243,28 +170,6 @@
         <div id="panel-velocidades" class="panel-curvas" style="display:none;">
             <h3 class="panel-title">Velocidades articulares (°/s)</h3>
             <canvas id="grafico-velocidades" height="220"></canvas>
-        </div>
-
-        <div id="panel-comparativa-sesion" class="panel-analitica" style="display:none;">
-            <h3 class="panel-title">Comparativa de tiros — sesión actual</h3>
-            <p class="sensor-nota">Últimos 4 tiros analizados en esta sesión (se actualiza automáticamente).</p>
-            <div class="comparativa-wrapper">
-                <table class="tabla-comparativa">
-                    <thead>
-                        <tr>
-                            <th>#</th>
-                            <th>Score</th>
-                            <th>Vel. pie (m/s)</th>
-                            <th>Estabilidad</th>
-                            <th>Cadera (°)</th>
-                            <th>Rodilla (°)</th>
-                            <th>Tobillo (°)</th>
-                            <th>Clasificación</th>
-                        </tr>
-                    </thead>
-                    <tbody id="tbody-comparativa-sesion"></tbody>
-                </table>
-            </div>
         </div>
 
         <div id="panel-analitica" class="panel-analitica" style="display:none;">
@@ -300,6 +205,28 @@
             </div>
         </div>
 
+        <div id="panel-comparativa-sesion" class="panel-comparativa-sesion" style="display:none;">
+            <h3 class="panel-title">Comparativa de sesión (4 tiros)</h3>
+            <p class="sensor-nota">La tabla resume los últimos 4 tiros de la sesión comparativa y destaca el mejor score compuesto.</p>
+            <div class="comparativa-wrapper">
+                <table class="tabla-comparativa">
+                    <thead>
+                        <tr>
+                            <th>#</th>
+                            <th>Score</th>
+                            <th>Vel. (m/s)</th>
+                            <th>Estab.</th>
+                            <th>Cadera</th>
+                            <th>Rodilla</th>
+                            <th>Tobillo</th>
+                            <th>Clasif.</th>
+                        </tr>
+                    </thead>
+                    <tbody id="tbody-comparativa-sesion"></tbody>
+                </table>
+            </div>
+        </div>
+
         <div id="panel-acciones" class="panel-acciones" style="display:none;">
             <button id="btn-video-anotado" class="sensor-btn primary-btn" type="button">
                 Generar vídeo anotado
@@ -317,9 +244,48 @@
     </section>
 
     <script src="js/config.js?v=20260507b"></script>
+    <script>
+    // FORCE: Restaurar pre-camera-controls si no existe
+    function asegurarPreCameraControls() {
+        if (document.querySelector('.pre-camera-controls')) {
+            console.log('✓ pre-camera-controls ya existe');
+            return;
+        }
+        console.warn('⚠ pre-camera-controls NO existe, inyectando...');
+        
+        const topBar = document.querySelector('.top-bar');
+        const cameraWrapper = document.querySelector('.camera-wrapper');
+        
+        if (topBar && cameraWrapper) {
+            const section = document.createElement('section');
+            section.className = 'pre-camera-controls';
+            section.innerHTML = `
+                <label for="modo-analisis" class="pre-camera-label">Modo</label>
+                <select id="modo-analisis" class="modern-input">
+                    <option value="individual" selected>Tiro individual</option>
+                    <option value="comparativa">Tiros comparativa (4 tiros)</option>
+                </select>
+                <p class="sensor-nota">En modo comparativa, el sistema agrupa 4 tiros consecutivos de la misma sesión y muestra la tabla de comparación.</p>
+            `;
+            cameraWrapper.parentNode.insertBefore(section, cameraWrapper);
+            console.log('✓ pre-camera-controls inyectado correctamente');
+        } else {
+            console.error('✗ No se pudo encontrar topBar o cameraWrapper');
+        }
+    }
+    
+    // Ejecutar al cargar el DOM
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', asegurarPreCameraControls);
+    } else {
+        asegurarPreCameraControls();
+    }
+    
+    // Ejecutar también después de 1 segundo por si acaso
+    setTimeout(asegurarPreCameraControls, 1000);
+    </script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
     <script src="js/api-client.js?v=20260507b"></script>
-    <script src="js/usuario_activo.js?v=20260507b"></script>
     <script src="js/api_futbol.js?v=20260507b"></script>
     <script src="js/registro_futbol.js?v=20260507b"></script>
     <script src="js/futbol.js?v=20260507b"></script>

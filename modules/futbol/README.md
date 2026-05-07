@@ -198,6 +198,13 @@ columna y la vista `v_golpeos` actualizadas.
 | `integration/web/js/futbol_videos.js`     | Lógica de la biblioteca de vídeos      |
 | `integration/web/js/usuario_activo.js`    | **Punto único de verdad** del usuario activo (`window.UsuarioActivo`). Compartido con el módulo salto. |
 
+### Flujo de captura
+
+- El selector `Modo` permite elegir entre `Tiro individual` y `Tiros comparativa (4 tiros)`.
+- En modo comparativa, el frontend acumula los últimos 4 tiros de la sesión y pinta una tabla de comparación con score, velocidad, estabilidad y ángulos.
+- En modo individual, la tabla de comparativa se oculta y el resultado se trata como un tiro aislado.
+- La biblioteca de vídeos separa automáticamente `Tiros individuales` y `Comparativas de 4 tiros`.
+
 ---
 
 ## Score compuesto (0–100)

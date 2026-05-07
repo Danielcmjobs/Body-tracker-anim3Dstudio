@@ -136,7 +136,8 @@ body {
     flex-direction: column;
     padding: 0;
     margin: 0;
-    overflow: hidden;
+    overflow-y: auto;
+    overflow-x: hidden;
 }
 
 /* Cabecera inquebrantable */
@@ -216,8 +217,13 @@ body {
     width: 100%;
     max-width: 500px;
     padding: 0 1.5rem 0.65rem 1.5rem;
-    display: grid;
+    display: flex !important;
+    flex-direction: column;
     gap: 0.35rem;
+    visibility: visible !important;
+    opacity: 1 !important;
+    position: relative !important;
+    z-index: 50 !important;
 }
 
 .pre-camera-label {
@@ -292,6 +298,28 @@ body {
     font-size: 13px;
     font-weight: 700;
     border: 1px solid rgba(203, 156, 255, 0.5);
+}
+
+.panel-comparativa-sesion {
+    width: 100%;
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 18px;
+    padding: 1rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+}
+
+.panel-comparativa-sesion .comparativa-wrapper {
+    margin-top: 0.2rem;
+}
+
+.videos-info-card {
+    background: rgba(255, 255, 255, 0.035);
+    border: 1px solid rgba(255, 255, 255, 0.09);
+    border-radius: 18px;
+    padding: 1rem;
 }
 
 .ia-lista {

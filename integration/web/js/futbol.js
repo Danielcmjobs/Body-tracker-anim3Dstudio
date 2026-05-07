@@ -100,9 +100,39 @@ document.addEventListener('DOMContentLoaded', () => {
         return { idUsuario };
     }
 
+    const COMPARATIVA_OBJETIVO = 4;
+
     function getPreferenciaGuardarVideo() {
         const opcion = document.querySelector('input[name="guardar-video-tiempo-real"]:checked');
         return opcion ? opcion.value : 'no';
+    }
+
+    function getModoAnalisis() {
+        const selector = document.getElementById('modo-analisis');
+        return selector ? selector.value : 'individual';
+    }
+
+    function actualizarBadgeComparativa() {
+        const badge = document.getElementById('comparativa-progreso');
+        if (!badge) {
+            return;
+        }
+
+        if (getModoAnalisis() !== 'comparativa') {
+            badge.style.display = 'none';
+            badge.textContent = '';
+            return;
+        }
+
+        badge.style.display = 'block';
+        const intentoActual = Math.min(historialTiros.length + 1, COMPARATIVA_OBJETIVO);
+        badge.textContent = `Tiro ${intentoActual}/${COMPARATIVA_OBJETIVO}`;
+    }
+
+    function resetComparativaSesion() {
+        historialTiros.length = 0;
+        actualizarComparativaSesion();
+        actualizarBadgeComparativa();
     }
 
     async function iniciarGrabacion() {
@@ -375,7 +405,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const panel = document.getElementById('panel-analitica');
         if (!panel) return;
         try {
-            const [fatiga, tendencia, comparativa] = await Promise.all([
+            let [fatiga, tendencia, comparativa] = await Promise.all([
                 obtenerFatigaUsuarioFutbol(idUsuario),
                 obtenerTendenciaUsuarioFutbol(idUsuario),
                 obtenerComparativaUsuarioFutbol(idUsuario, 4),
@@ -441,6 +471,14 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Registra el tiro en el historial de sesión (máx. 4) y actualiza la tabla.
     function registrarTiroSesion(data) {
+        const modo = getModoAnalisis();
+        if (modo !== 'comparativa') {
+            historialTiros.length = 0;
+            actualizarComparativaSesion();
+            actualizarBadgeComparativa();
+            return;
+        }
+
         historialTiros.push({
             score_compuesto: data.score_compuesto,
             velocidad_pie_ms: data.velocidad_pie_ms,
@@ -450,10 +488,14 @@ document.addEventListener('DOMContentLoaded', () => {
             angulo_tobillo_deg: data.angulo_tobillo_deg,
             clasificacion: data.clasificacion,
         });
-        if (historialTiros.length > 4) {
+        if (historialTiros.length > COMPARATIVA_OBJETIVO) {
             historialTiros.shift();
         }
         actualizarComparativaSesion();
+        actualizarBadgeComparativa();
+        if (historialTiros.length === COMPARATIVA_OBJETIVO) {
+            mostrarToast('Comparativa de 4 tiros completada.', 'success', 2600);
+        }
     }
 
     // Pinta la tabla de comparativa de la sesión.
@@ -461,6 +503,12 @@ document.addEventListener('DOMContentLoaded', () => {
         const panel = document.getElementById('panel-comparativa-sesion');
         const tbody = document.getElementById('tbody-comparativa-sesion');
         if (!panel || !tbody) return;
+
+        if (getModoAnalisis() !== 'comparativa') {
+            panel.style.display = 'none';
+            tbody.innerHTML = '';
+            return;
+        }
 
         tbody.innerHTML = '';
         historialTiros.forEach((t, i) => {
@@ -560,8 +608,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // Panel analítico — carga al seleccionar usuario
     // Crear handler nombrado para evitar duplicados al navegar
     const handleUsuarioChange = () => {
-        historialTiros.length = 0;  // LIMPIAR historial del usuario anterior
-        actualizarComparativaSesion();  // Redibuja tabla vacía
+        resetComparativaSesion();
         cargarAnaliticaFutbol().catch(() => {});
     };
     // Remover listener anterior si existe (evita duplicados)
@@ -585,6 +632,10 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
+    document.getElementById('modo-analisis')?.addEventListener('change', () => {
+        resetComparativaSesion();
+    });
+
     // Panel analítico — cambio de métrica
     const selectMetrica = document.getElementById('metrica-analitica');
     if (selectMetrica) {
@@ -592,6 +643,8 @@ document.addEventListener('DOMContentLoaded', () => {
             cargarAnaliticaFutbol().catch(() => {});
         });
     }
+
+    actualizarBadgeComparativa();
 
     // Asegura que la camara se libere al salir.
     window.addEventListener('beforeunload', () => {
