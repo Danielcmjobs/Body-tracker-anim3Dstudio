@@ -72,14 +72,32 @@ document.addEventListener('DOMContentLoaded', () => {
         // Usar helper compartido (window.UsuarioActivo) si está disponible
         if (typeof window !== 'undefined' && window.UsuarioActivo) {
             const u = window.UsuarioActivo.obtener();
-            return u ? { idUsuario: u.idUsuario } : null;
+            const idUsuario = Number(u && u.idUsuario);
+            return Number.isFinite(idUsuario) && idUsuario > 0 ? { idUsuario } : null;
         }
         // Fallback: lectura directa (compatibilidad)
-        const idUsuario = sessionStorage.getItem('idUser');
-        if (!idUsuario) {
+        const rawIdUsuario = sessionStorage.getItem('idUser');
+        if (!rawIdUsuario) {
             return null;
         }
-        return { idUsuario: Number(idUsuario) };
+
+        let idUsuario = Number(rawIdUsuario);
+        if (!Number.isFinite(idUsuario)) {
+            try {
+                const parsed = JSON.parse(rawIdUsuario);
+                if (parsed) {
+                    idUsuario = Number(parsed.id_usuario || parsed.idUser || parsed.id || parsed);
+                }
+            } catch (_e) {
+                return null;
+            }
+        }
+
+        if (!Number.isFinite(idUsuario) || idUsuario <= 0) {
+            return null;
+        }
+
+        return { idUsuario };
     }
 
     function getPreferenciaGuardarVideo() {

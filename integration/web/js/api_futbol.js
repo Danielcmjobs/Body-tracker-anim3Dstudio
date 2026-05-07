@@ -56,8 +56,9 @@ async function analizarGolpeo(videoBlob, opciones = {}) {
     const formData = new FormData();
     formData.append('video', videoBlob, 'golpeo.webm');
 
-    if (opciones.idUsuario) {
-        formData.append('id_usuario', String(opciones.idUsuario));
+    const idUsuarioNum = Number(opciones.idUsuario);
+    if (Number.isFinite(idUsuarioNum) && idUsuarioNum > 0) {
+        formData.append('id_usuario', String(idUsuarioNum));
     }
     if (opciones.guardarBd) {
         formData.append('guardar_bd', 'true');
