@@ -99,6 +99,7 @@ CREATE TABLE IF NOT EXISTS gestos_futbol (
     asimetria_postura_pct    DECIMAL(6,2) NULL,
     score_compuesto          DECIMAL(5,1) NULL,
     clasificacion            VARCHAR(50)  NULL,
+    features_version         VARCHAR(20)  NOT NULL DEFAULT 'v1',
     CONSTRAINT fk_futbol_gesto
         FOREIGN KEY (id_gesto) REFERENCES gestos(id_gesto)
         ON DELETE CASCADE
@@ -192,7 +193,8 @@ SELECT g.id_gesto                AS id_golpeo,
        f.tiempo_estabilizacion_s,
        f.asimetria_postura_pct,
        f.score_compuesto,
-       f.clasificacion
+       f.clasificacion,
+       f.features_version
 FROM gestos g
 JOIN gestos_futbol f ON f.id_gesto = g.id_gesto
 WHERE g.modulo = 'futbol';

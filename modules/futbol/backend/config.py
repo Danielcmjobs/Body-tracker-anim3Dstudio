@@ -4,6 +4,17 @@ import os
 
 FLASK_PORT: int = int(os.getenv("FUTBOL_PORT", "5002"))
 
+# ─────────────────────────────────────────────────────────────
+# Versionado de features (esquema de métricas extraídas por gesto)
+# Se persiste en gestos_futbol.features_version para permitir
+# análisis comparativos coherentes cuando se cambien fórmulas o
+# se añadan nuevas métricas. Incrementar cuando:
+#   - cambien fórmulas de score / umbrales por defecto
+#   - se añadan/quiten métricas en SCORE_PESOS_GOLPEO o RANGOS
+#   - cambie la lógica de clasificación
+# ─────────────────────────────────────────────────────────────
+FEATURES_VERSION: str = os.getenv("FUTBOL_FEATURES_VERSION", "v1")
+
 _cors_origins_raw = os.getenv("CORS_ORIGINS", "*").strip()
 if _cors_origins_raw == "*":
     CORS_ORIGINS = "*"

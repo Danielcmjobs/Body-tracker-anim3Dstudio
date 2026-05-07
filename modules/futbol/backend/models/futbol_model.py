@@ -19,6 +19,7 @@ import logging
 
 import mysql.connector
 
+from config import FEATURES_VERSION
 from models.db import get_connection
 from utils.serializers import normalizar_float
 
@@ -30,7 +31,7 @@ _CAMPOS_VGOLPEOS = (
     "pierna_golpeo, pierna_apoyo, velocidad_pie_ms, frame_impacto, "
     "angulo_cadera_deg, angulo_rodilla_deg, angulo_tobillo_deg, "
     "estabilidad_tronco, oscilacion_tronco_px, tiempo_estabilizacion_s, "
-    "asimetria_postura_pct, score_compuesto, clasificacion"
+    "asimetria_postura_pct, score_compuesto, clasificacion, features_version"
 )
 
 
@@ -70,8 +71,9 @@ class FutbolModel:
                 "INSERT INTO gestos_futbol "
                 "(id_gesto, pierna_golpeo, pierna_apoyo, velocidad_pie_ms, frame_impacto, "
                 " angulo_cadera_deg, angulo_rodilla_deg, angulo_tobillo_deg, "
-                " estabilidad_tronco, asimetria_postura_pct, score_compuesto, clasificacion) "
-                "VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)",
+                " estabilidad_tronco, asimetria_postura_pct, score_compuesto, clasificacion, "
+                " features_version) "
+                "VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)",
                 (
                     id_gesto,
                     _enum_pierna(payload["pierna_golpeo"]),
@@ -85,6 +87,7 @@ class FutbolModel:
                     payload["asimetria_postura_pct"],
                     payload["score_compuesto"],
                     payload["clasificacion"],
+                    FEATURES_VERSION,
                 ),
             )
 
