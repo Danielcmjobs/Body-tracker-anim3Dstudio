@@ -55,7 +55,7 @@ Llevar el módulo de futbol al mismo nivel de producto que el módulo de salto e
 
 ## Fase 0 — Base estable y observabilidad
 
-**Estado:** parcialmente completado  
+**Estado:** ✅ completado  
 **Esfuerzo estimado:** 0,5 día
 
 ### Tareas
@@ -66,9 +66,9 @@ Llevar el módulo de futbol al mismo nivel de producto que el módulo de salto e
 | `crearUsuario` devuelve siempre `id_usuario` numérico | `registro.js` | ✅ hecho |
 | `id_usuario` se envía como número en `formData`, no como objeto | `api_salto.js` | ✅ hecho |
 | `actualizarUsuario(id, data)` firma correcta en `registro.js` | `registro.js` | ✅ hecho |
-| Cache-busting `?v=...` en `futbol_videos.html` | `futbol_videos.html` | ❌ pendiente |
-| Logs estructurados backend: alta/edición/eliminación usuario | `usuario_controller.py` (futbol) | ❌ pendiente |
-| Logs estructurados backend: guardado golpeo + fallos BD | `futbol_db_controller.py` | ❌ pendiente |
+| Cache-busting `?v=...` en `futbol_videos.html` | `futbol_videos.html` | ✅ hecho |
+| Logs estructurados backend: alta/edición/eliminación usuario | `usuario_controller.py` (futbol) | ✅ hecho |
+| Logs estructurados backend: guardado golpeo + fallos BD | `futbol_db_controller.py` | ✅ hecho |
 
 ### Criterio done
 
@@ -267,16 +267,18 @@ Los endpoints `/curvas` y `/landmarks` ya existen; verificar que `guardar_golpeo
 
 ## Fase 5 — Cierre de deuda técnica y documentación
 
-**Estado:** no iniciado  
+**Estado:** ✅ completado (2026-05-07)  
 **Esfuerzo estimado:** 1 día
 
-| Tarea | Detalle |
-|-------|---------|
-| Limpiar `app.py` de futbol | Solo `analizar_golpeo`, `video_anotado` y arranque. Todo lo demás en blueprints |
-| Deprecar `/api/usuarios_futbol` | Mantener 30 días con header `Deprecation: true` + log de advertencia; eliminar en siguiente sprint |
-| `modules/futbol/README.md` | Actualizar al esquema unificado real (endpoints, BD, cómo levantar) |
-| `scripts/README_BBDD_UNIFICADA.md §9` | Guía de contratos API compartidos salto/futbol |
-| Checklist de regresión | 10 pasos manuales antes de cada merge a `main` |
+| Tarea | Detalle | Estado |
+|-------|---------|--------|
+| Limpiar `app.py` de futbol | Solo `analizar_golpeo`, `video_anotado` y arranque. Todo lo demás en blueprints | ✅ |
+| Deprecar `/api/usuarios_futbol` | Cabeceras `Deprecation` + `Sunset: 2026-08-01` + `Link` en CRUD y analítica legacy. Logs `[USUARIOS_FUTBOL]`. Paginación y validaciones alineadas al canónico | ✅ |
+| `modules/futbol/README.md` | Actualizado al esquema unificado, rutas legacy y `FEATURES_VERSION` | ✅ |
+| `scripts/README_BBDD_UNIFICADA.md` | Cubre `migrate_features_version.sql` y `usuarios_futbol_controller` | ✅ |
+| Helper compartido `window.UsuarioActivo` | `integration/web/js/usuario_activo.js` consumido por futbol/salto | ✅ |
+| Versionado de features | `config.FEATURES_VERSION` + columna `gestos_futbol.features_version` + migración idempotente | ✅ |
+| Checklist de regresión cruzada | `docs/checklist_regresion_cruzada_futbol_salto.md` | ✅ |
 
 ### Criterio done
 

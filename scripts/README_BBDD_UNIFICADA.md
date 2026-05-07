@@ -62,6 +62,7 @@ usuarios 1───* sesiones
 |---------|--------------|
 | `scripts/init_db_unificada.sql` | BD limpia: crea `bd_anim3d` con todas las tablas + vistas |
 | `scripts/migrate_to_unified.sql` | Migración desde `bd_anim3d_saltos` ya existente |
+| `scripts/migrate_features_version.sql` | Añade `gestos_futbol.features_version` y recrea `v_golpeos`. Idempotente |
 | `scripts/init_db.sql` | (LEGADO) esquema antiguo, conservado solo como referencia |
 
 ### 3.1 Ejecución desde PowerShell

@@ -137,13 +137,53 @@ Campos relevantes de la respuesta:
 
 ### Rutas legacy (deprecadas — retirada 2026-08-01)
 
+#### Analítica
+
 | Ruta legacy                                | Sustituta canónica                        |
 |--------------------------------------------|-------------------------------------------|
 | `/api/usuarios_futbol/<id>/fatiga`         | `/api/usuarios/<id>/fatiga`               |
 | `/api/usuarios_futbol/<id>/tendencia`      | `/api/usuarios/<id>/tendencia`            |
 | `/api/usuarios_futbol/<id>/comparativa`    | `/api/usuarios/<id>/comparativa`          |
 
-Estas rutas devuelven cabeceras `Deprecation` y `Sunset: 2026-08-01`.
+#### CRUD de usuarios
+
+| Método | Ruta legacy                              | Sustituta canónica           |
+|--------|------------------------------------------|------------------------------|
+| GET    | `/api/usuarios_futbol`                   | `/api/usuarios`              |
+| GET    | `/api/usuarios_futbol/<id>`              | `/api/usuarios/<id>`         |
+| POST   | `/api/usuarios_futbol`                   | `/api/usuarios`              |
+| PUT    | `/api/usuarios_futbol/<id>`              | `/api/usuarios/<id>`         |
+| DELETE | `/api/usuarios_futbol/<id>`              | `/api/usuarios/<id>`         |
+
+El CRUD legacy acepta paginación canónica (`?paginado=1&limit=&offset=`) y
+devuelve **ambos** campos por compatibilidad: `usuarios` (legacy) y
+`items` + `total` + `has_more` (canónico). Validaciones idénticas al canónico:
+`altura_m` (0.50–2.50), `peso_kg` (20–300), 409 en alias duplicado.
+
+Todas las rutas legacy devuelven cabeceras:
+
+```
+Deprecation: version="2026-08-01"
+Sunset: Sat, 01 Aug 2026 00:00:00 GMT
+Link: </api/usuarios>; rel="successor-version"
+```
+
+---
+
+## Versionado de features
+
+Los gestos persisten la versión del esquema de métricas con que fueron
+extraídos en `gestos_futbol.features_version`. Se controla con la constante
+`config.FEATURES_VERSION` (env `FUTBOL_FEATURES_VERSION`, por defecto `v1`).
+
+Incrementar la versión cuando:
+- Cambien fórmulas de score / umbrales por defecto.
+- Se añadan o quiten métricas en `SCORE_PESOS_GOLPEO` o `SCORE_RANGOS_GOLPEO`.
+- Cambie la lógica de clasificación.
+
+Para BBDD pre-existentes: aplicar `scripts/migrate_features_version.sql`
+(idempotente). Para BBDD nuevas: el `init_db_unificada.sql` ya incluye la
+columna y la vista `v_golpeos` actualizadas.
 
 ---
 
@@ -156,6 +196,7 @@ Estas rutas devuelven cabeceras `Deprecation` y `Sunset: 2026-08-01`.
 | `integration/web/js/api_futbol.js`        | Llamadas al backend + render analítica |
 | `integration/web/js/futbol.js`            | Flujo de grabación, resultados, comparativa 4 tiros |
 | `integration/web/js/futbol_videos.js`     | Lógica de la biblioteca de vídeos      |
+| `integration/web/js/usuario_activo.js`    | **Punto único de verdad** del usuario activo (`window.UsuarioActivo`). Compartido con el módulo salto. |
 
 ---
 
