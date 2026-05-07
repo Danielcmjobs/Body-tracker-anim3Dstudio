@@ -322,6 +322,91 @@ body {
     padding: 1rem;
 }
 
+.panel-analitica,
+.panel-comparativa-sesion {
+    width: 100%;
+    background: rgba(255, 255, 255, 0.035);
+    border: 1px solid rgba(255, 255, 255, 0.09);
+    border-radius: 18px;
+    padding: 1rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.9rem;
+    box-sizing: border-box;
+    overflow: hidden;
+}
+
+.panel-analitica .panel-title,
+.panel-comparativa-sesion .panel-title,
+.panel-analitica .panel-subtitle,
+.panel-comparativa-sesion .panel-subtitle {
+    margin-bottom: 0;
+}
+
+.panel-analitica .panel-subtitle,
+.panel-comparativa-sesion .panel-subtitle {
+    margin-top: 0.25rem;
+    color: #d7b9f3;
+    font-size: 0.92rem;
+    font-weight: 700;
+    letter-spacing: 0.2px;
+}
+
+.panel-analitica canvas,
+.panel-comparativa-sesion canvas {
+    width: 100% !important;
+    max-width: 100%;
+}
+
+.panel-analitica canvas {
+    height: 180px !important;
+}
+
+.data-box-row {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.75rem;
+}
+
+.data-box-row .data-box {
+    min-width: 0;
+}
+
+.panel-analitica .comparativa-wrapper,
+.panel-comparativa-sesion .comparativa-wrapper {
+    overflow-x: auto;
+    width: 100%;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 14px;
+    background: rgba(0, 0, 0, 0.16);
+    padding: 0.4rem;
+}
+
+.panel-analitica .tabla-comparativa,
+.panel-comparativa-sesion .tabla-comparativa {
+    min-width: 660px;
+    width: 100%;
+    table-layout: fixed;
+}
+
+.panel-analitica .tabla-comparativa th,
+.panel-analitica .tabla-comparativa td,
+.panel-comparativa-sesion .tabla-comparativa th,
+.panel-comparativa-sesion .tabla-comparativa td {
+    padding: 0.35rem 0.42rem;
+    font-size: 0.75rem;
+    white-space: nowrap;
+}
+
+.panel-analitica .tabla-comparativa th,
+.panel-comparativa-sesion .tabla-comparativa th {
+    font-size: 0.72rem;
+}
+
+.panel-analitica .comparativa-wrapper {
+    margin-top: 0.15rem;
+}
+
 .ia-lista {
     background: var(--purple-brand) !important;
 }
@@ -1500,6 +1585,37 @@ body {
     background: rgba(33, 150, 243, 0.15);
     color: #64b5f6;
     font-weight: 600;
+}
+
+@media (max-width: 720px) {
+    .technical-data-grid,
+    .data-box-row {
+        grid-template-columns: 1fr;
+    }
+
+    .panel-analitica,
+    .panel-comparativa-sesion,
+    .videos-info-card {
+        padding: 0.9rem;
+        border-radius: 16px;
+    }
+
+    .panel-analitica canvas {
+        height: 160px !important;
+    }
+
+    .panel-analitica .tabla-comparativa,
+    .panel-comparativa-sesion .tabla-comparativa {
+        min-width: 560px;
+    }
+
+    .panel-analitica .tabla-comparativa th,
+    .panel-analitica .tabla-comparativa td,
+    .panel-comparativa-sesion .tabla-comparativa th,
+    .panel-comparativa-sesion .tabla-comparativa td {
+        padding: 0.3rem 0.35rem;
+        font-size: 0.7rem;
+    }
 }
 
 
