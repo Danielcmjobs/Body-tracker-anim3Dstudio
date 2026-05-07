@@ -167,8 +167,30 @@ async function cargarUsuarios() {
     optionTodos.textContent = 'Todos los usuarios';
     select.appendChild(optionTodos);
 
-    const payload = await fetchJsonFutbol(`${getFutbolBaseUrl()}/api/usuarios_futbol?paginado=1&limit=200&offset=0`);
-    const usuarios = Array.isArray(payload) ? payload : (payload.usuarios || payload.items || []);
+    const usuarios = [];
+    const pageSize = 100;
+    let offset = 0;
+    let hasMore = true;
+
+    while (hasMore) {
+        const query = new URLSearchParams({
+            paginado: '1',
+            limit: String(pageSize),
+            offset: String(offset)
+        });
+        const payload = await fetchJsonFutbol(`${getFutbolBaseUrl()}/api/usuarios_futbol?${query.toString()}`);
+        const items = Array.isArray(payload) ? payload : (payload.usuarios || payload.items || []);
+        usuarios.push(...items);
+
+        hasMore = Boolean(payload?.has_more);
+        if (!hasMore && Array.isArray(payload)) {
+            hasMore = items.length === pageSize;
+        }
+        offset += pageSize;
+        if (!items.length) {
+            break;
+        }
+    }
 
     usuarios
         .sort((a, b) => String(a.alias || '').localeCompare(String(b.alias || '')))
