@@ -69,6 +69,12 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Arranca la grabacion con MediaRecorder.
     function getUsuarioActivo() {
+        // Usar helper compartido (window.UsuarioActivo) si está disponible
+        if (typeof window !== 'undefined' && window.UsuarioActivo) {
+            const u = window.UsuarioActivo.obtener();
+            return u ? { idUsuario: u.idUsuario } : null;
+        }
+        // Fallback: lectura directa (compatibilidad)
         const idUsuario = sessionStorage.getItem('idUser');
         if (!idUsuario) {
             return null;

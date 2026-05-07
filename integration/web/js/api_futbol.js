@@ -493,8 +493,9 @@ function getFutbolMetricaAnalitica() {
 }
 
 async function cargarAnaliticaFutbol({ mostrarErrores = false } = {}) {
-    const idRaw = sessionStorage.getItem('idUser');
-    const id = Number(idRaw);
+    const id = (typeof window !== 'undefined' && window.UsuarioActivo)
+        ? window.UsuarioActivo.obtenerId()
+        : Number(sessionStorage.getItem('idUser'));
     if (!id || !Number.isFinite(id) || id <= 0) {
         limpiarAnaliticaPanelFutbol();
         return;

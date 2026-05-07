@@ -115,17 +115,29 @@ function fijarTamanoGraficasAnalitica() {
 // getBackendBaseUrl() se carga desde js/config.js
 
 function getUsuarioActivo() {
-    const rawId = sessionStorage.getItem('idUser');
+    // Usar helper compartido (window.UsuarioActivo) si está disponible.
+    // Salto requiere altura adicional para algunos cálculos.
     const altura = parseFloat(sessionStorage.getItem('alturaUser') || '0');
-
-    if (!rawId || !(altura > 0)) {
+    if (!(altura > 0)) {
         return null;
     }
 
-    // Normalizar posibles formatos erróneos: "123", "{...}", or accidental "[object Object]".
+    if (typeof window !== 'undefined' && window.UsuarioActivo) {
+        const u = window.UsuarioActivo.obtener();
+        if (u && u.idUsuario) {
+            return { idUsuario: u.idUsuario, altura: altura };
+        }
+        return null;
+    }
+
+    // Fallback (compatibilidad): lectura directa con normalizacion de formatos.
+    const rawId = sessionStorage.getItem('idUser');
+    if (!rawId) {
+        return null;
+    }
+
     let idNum = Number(rawId);
     if (!Number.isFinite(idNum)) {
-        // Intentar parsear JSON si parece un objeto serializado
         try {
             const parsed = JSON.parse(rawId);
             if (parsed) {
