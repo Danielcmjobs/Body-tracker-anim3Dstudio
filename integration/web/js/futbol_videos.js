@@ -155,61 +155,21 @@ function renderIndividuales(individuales) {
 }
 
 async function cargarUsuarios() {
-    const select = document.getElementById('filtro-usuario');
-    if (!select) {
-        return;
-    }
-
-    select.innerHTML = '';
-
-    const optionTodos = document.createElement('option');
-    optionTodos.value = '';
-    optionTodos.textContent = 'Todos los usuarios';
-    select.appendChild(optionTodos);
-
-    const usuarios = [];
-    const pageSize = 100;
-    let offset = 0;
-    let hasMore = true;
-
-    while (hasMore) {
-        const query = new URLSearchParams({
-            paginado: '1',
-            limit: String(pageSize),
-            offset: String(offset)
-        });
-        const payload = await fetchJsonFutbol(`${getFutbolBaseUrl()}/api/usuarios_futbol?${query.toString()}`);
-        const items = Array.isArray(payload) ? payload : (payload.usuarios || payload.items || []);
-        usuarios.push(...items);
-
-        hasMore = Boolean(payload?.has_more);
-        if (!hasMore && Array.isArray(payload)) {
-            hasMore = items.length === pageSize;
-        }
-        offset += pageSize;
-        if (!items.length) {
-            break;
-        }
-    }
-
-    usuarios
-        .sort((a, b) => String(a.alias || '').localeCompare(String(b.alias || '')))
-        .forEach((u) => {
-            const opt = document.createElement('option');
-            opt.value = String(u.id_usuario);
-            const nombre = u.alias || u.nombre_completo || u.nombre || 'Usuario';
-            opt.textContent = `${nombre} (ID ${u.id_usuario})`;
-            select.appendChild(opt);
-        });
+    return GalleryHelper.fetchAndPopulateUsers({
+        url: `${getFutbolBaseUrl()}/api/usuarios_futbol`,
+        selectId: 'filtro-usuario',
+        isPaginated: true,
+        pageSize: 100,
+        transformItem: (u) => ({ value: String(u.id_usuario), text: `${u.alias || u.nombre_completo || u.nombre || 'Usuario'} (ID ${u.id_usuario})` }),
+        fetchFn: fetchJsonFutbol,
+    });
 }
 
 async function cargarBiblioteca() {
     const estado = document.getElementById('videos-estado');
     const usuario = document.getElementById('filtro-usuario')?.value || '';
 
-    if (estado) {
-        estado.textContent = 'Cargando biblioteca...';
-    }
+    GalleryHelper.setEstado('videos-estado', 'Cargando biblioteca...');
 
     const params = new URLSearchParams();
     if (usuario) params.set('id_usuario', usuario);
@@ -220,10 +180,8 @@ async function cargarBiblioteca() {
     renderComparativas(payload.comparativas || []);
     renderIndividuales(payload.individuales || []);
 
-    if (estado) {
-        const total = Number(payload.totales?.videos || 0);
-        estado.textContent = `${total} videos encontrados.`;
-    }
+    const total = Number(payload.totales?.videos || 0);
+    GalleryHelper.setEstado('videos-estado', `${total} videos encontrados.`);
 }
 
 document.addEventListener('DOMContentLoaded', async () => {
@@ -234,27 +192,14 @@ document.addEventListener('DOMContentLoaded', async () => {
         await cargarUsuarios();
         await cargarBiblioteca();
     } catch (error) {
-        if (estado) {
-            estado.textContent = `Error: ${error.message}`;
-            estado.style.color = '#ff6b6b';
-        }
+        GalleryHelper.setEstado('videos-estado', `Error: ${error.message}`, true);
     }
 
     document.getElementById('filtro-usuario')?.addEventListener('change', () => {
-        cargarBiblioteca().catch((error) => {
-            if (estado) {
-                estado.textContent = `Error: ${error.message}`;
-                estado.style.color = '#ff6b6b';
-            }
-        });
+        cargarBiblioteca().catch((error) => GalleryHelper.setEstado('videos-estado', `Error: ${error.message}`, true));
     });
 
     btnRefrescar?.addEventListener('click', () => {
-        cargarBiblioteca().catch((error) => {
-            if (estado) {
-                estado.textContent = `Error: ${error.message}`;
-                estado.style.color = '#ff6b6b';
-            }
-        });
+        cargarBiblioteca().catch((error) => GalleryHelper.setEstado('videos-estado', `Error: ${error.message}`, true));
     });
 });

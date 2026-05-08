@@ -191,52 +191,28 @@ function resetFiltersForModule(modulo) {
 
 async function cargarUsuariosModulo(modulo) {
     const config = getConfigModulo(modulo);
-    const select = document.getElementById('filtro-usuario');
-    if (!config || !select) {
-        return [];
-    }
+    if (!config) return [];
 
-    select.innerHTML = '';
-
-    const optionTodos = document.createElement('option');
-    optionTodos.value = '';
-    optionTodos.textContent = 'Todos los usuarios';
-    select.appendChild(optionTodos);
-
-    let items = [];
+    // Delegate to GalleryHelper to avoid duplicating pagination/transform logic.
     if (modulo === 'salto') {
-        const payload = await fetchJson(config.usuariosUrl());
-        items = Array.isArray(payload) ? payload : (payload.items || []);
-    } else {
-        const pageSize = 100;
-        let offset = 0;
-        let hasMore = true;
-        while (hasMore) {
-            const url = `${getFutbolBaseUrl()}/api/usuarios_futbol?${new URLSearchParams({ paginado: '1', limit: String(pageSize), offset: String(offset) }).toString()}`;
-            const payload = await fetchJson(url);
-            const pageItems = Array.isArray(payload) ? payload : (payload.usuarios || payload.items || []);
-            items.push(...pageItems);
-            hasMore = Boolean(payload?.has_more);
-            if (!hasMore && Array.isArray(payload)) {
-                hasMore = pageItems.length === pageSize;
-            }
-            offset += pageSize;
-            if (!pageItems.length) {
-                break;
-            }
-        }
+        return GalleryHelper.fetchAndPopulateUsers({
+            url: config.usuariosUrl(),
+            selectId: 'filtro-usuario',
+            isPaginated: false,
+            transformItem: (u) => ({ value: String(u.id_usuario), text: config.usuarioEtiqueta(u) }),
+            fetchFn: fetchJson,
+        });
     }
 
-    items
-        .sort((a, b) => String(a.alias || a.nombre_completo || '').localeCompare(String(b.alias || b.nombre_completo || '')))
-        .forEach((usuario) => {
-            const option = document.createElement('option');
-            option.value = String(usuario.id_usuario);
-            option.textContent = config.usuarioEtiqueta(usuario);
-            select.appendChild(option);
-        });
-
-    return items;
+    // Futbol: API paginada
+    return GalleryHelper.fetchAndPopulateUsers({
+        url: `${getFutbolBaseUrl()}/api/usuarios_futbol`,
+        selectId: 'filtro-usuario',
+        isPaginated: true,
+        pageSize: 100,
+        transformItem: (u) => ({ value: String(u.id_usuario), text: config.usuarioEtiqueta(u) }),
+        fetchFn: fetchJson,
+    });
 }
 
 function buildVideoUrl(modulo, video) {
