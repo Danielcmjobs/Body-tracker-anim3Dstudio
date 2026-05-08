@@ -80,34 +80,6 @@ const galeriaState = {
     usuarios: [],
 };
 
-function formatearFechaSoloFecha(fechaIso) {
-    if (!fechaIso) {
-        return '--';
-    }
-    const fecha = new Date(fechaIso);
-    if (Number.isNaN(fecha.getTime())) {
-        return '--';
-    }
-    return fecha.toLocaleDateString('es-ES');
-}
-
-function formatearFechaSoloHora(fechaIso) {
-    if (!fechaIso) {
-        return '--';
-    }
-    const fecha = new Date(fechaIso);
-    if (Number.isNaN(fecha.getTime())) {
-        return '--';
-    }
-    return fecha.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' });
-}
-
-function formatearNumero(valor, decimales = 1) {
-    if (valor === null || valor === undefined || Number.isNaN(Number(valor))) {
-        return '--';
-    }
-    return Number(valor).toFixed(decimales);
-}
 
 function formatearPierna(valor) {
     const texto = String(valor || '').trim().toLowerCase();

@@ -1,26 +1,3 @@
-function formatearFecha(fechaIso) {
-    if (!fechaIso) {
-        return 'Sin fecha';
-    }
-    const fecha = new Date(fechaIso);
-    if (Number.isNaN(fecha.getTime())) {
-        return 'Sin fecha';
-    }
-    return fecha.toLocaleString('es-ES', {
-        year: 'numeric',
-        month: '2-digit',
-        day: '2-digit',
-        hour: '2-digit',
-        minute: '2-digit'
-    });
-}
-
-function formatearNumero(valor, decimales = 1) {
-    if (valor === null || valor === undefined || Number.isNaN(Number(valor))) {
-        return '--';
-    }
-    return Number(valor).toFixed(decimales);
-}
 
 function crearControlesVideo(videoEl) {
     const controles = document.createElement('div');

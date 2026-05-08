@@ -539,29 +539,8 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    // Helpers robustos de formateo
-    function formatearNumero(valor, decimales = 2) {
-        if (valor === null || valor === undefined || Number.isNaN(Number(valor))) {
-            return '--';
-        }
-        return Number(valor).toFixed(decimales);
-    }
-
-    function formatearGrados(valor) {
-        if (valor === null || valor === undefined || Number.isNaN(Number(valor))) {
-            return '-- deg';
-        }
-        return `${Number(valor).toFixed(1)} deg`;
-    }
-
-    // Helper defensivo para score compuesto (0-100 o --)
-    function formatearScore(score) {
-        if (score === null || score === undefined || Number.isNaN(Number(score))) {
-            return '--';
-        }
-        const s = Number(score);
-        return s >= 0 && s <= 100 ? formatearNumero(s, 1) : '--';
-    }
+    // Helpers robustos de formateo — delegated to shared/formatters.js
+    // formatearNumero, formatearGrados, formatearScore are provided by shared formatter
 
     if (btnGrabar) {
         // Alterna entre iniciar y detener la grabacion.
@@ -607,9 +586,28 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Panel analítico — carga al seleccionar usuario
     // Crear handler nombrado para evitar duplicados al navegar
+    async function actualizarAnaliticaActiva({ mostrarErrores = false } = {}) {
+        const usuario = getUsuarioActivo();
+        if (!usuario) {
+            // Si no hay usuario, limpiar panel analitica y salir
+            try {
+                const panel = document.getElementById('panel-analitica');
+                if (panel) panel.style.display = 'none';
+            } catch (_e) {}
+            return;
+        }
+        try {
+            await cargarAnaliticaUsuario(usuario.idUsuario);
+        } catch (err) {
+            if (mostrarErrores && typeof mostrarToast === 'function') {
+                mostrarToast(err.message || 'Error cargando analítica', 'error');
+            }
+        }
+    }
+
     const handleUsuarioChange = () => {
         resetComparativaSesion();
-        cargarAnaliticaFutbol().catch(() => {});
+        actualizarAnaliticaActiva().catch(() => {});
     };
     // Remover listener anterior si existe (evita duplicados)
     document.removeEventListener('usuarioSeleccionCambio', handleUsuarioChange);
@@ -619,7 +617,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const btnActAnalitica = document.getElementById('btn-actualizar-analitica');
     if (btnActAnalitica) {
         btnActAnalitica.addEventListener('click', () => {
-            cargarAnaliticaFutbol({ mostrarErrores: true }).catch(() => {});
+            actualizarAnaliticaActiva({ mostrarErrores: true }).catch(() => {});
         });
     }
 
@@ -640,7 +638,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const selectMetrica = document.getElementById('metrica-analitica');
     if (selectMetrica) {
         selectMetrica.addEventListener('change', () => {
-            cargarAnaliticaFutbol().catch(() => {});
+            actualizarAnaliticaActiva().catch(() => {});
         });
     }
 

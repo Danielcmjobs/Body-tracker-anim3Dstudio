@@ -493,37 +493,3 @@ function getFutbolMetricaAnalitica() {
     return document.getElementById('metrica-analitica')?.value || 'velocidad_pie_ms';
 }
 
-async function cargarAnaliticaFutbol({ mostrarErrores = false } = {}) {
-    const id = (typeof window !== 'undefined' && window.UsuarioActivo)
-        ? window.UsuarioActivo.obtenerId()
-        : Number(sessionStorage.getItem('idUser'));
-    if (!id || !Number.isFinite(id) || id <= 0) {
-        limpiarAnaliticaPanelFutbol();
-        return;
-    }
-
-    const metrica = getFutbolMetricaAnalitica();
-    _asignarTextoFutbol('analitica-estado', 'Actualizando analitica...');
-
-    try {
-        const resultados = await Promise.allSettled([
-            obtenerFatigaUsuarioFutbol(id, metrica),
-            obtenerTendenciaUsuarioFutbol(id, metrica),
-            obtenerAlertasTendenciaFutbol(id),
-            obtenerAnaliticaAvanzadaFutbol(id, metrica)
-        ]);
-
-        const fatiga = resultados[0].status === 'fulfilled' ? resultados[0].value : {};
-        const tendencia = resultados[1].status === 'fulfilled' ? resultados[1].value : {};
-        const alertasPayload = resultados[2].status === 'fulfilled' ? resultados[2].value : { alertas: [] };
-        const avanzada = resultados[3].status === 'fulfilled' ? resultados[3].value : {};
-
-        _actualizarPanelAnaliticaFutbol(tendencia, fatiga, alertasPayload.alertas || []);
-        _actualizarPanelAvanzadoFutbol(avanzada);
-    } catch (err) {
-        _asignarTextoFutbol('analitica-estado', `Error cargando analitica: ${err.message}`);
-        if (mostrarErrores && typeof mostrarToast === 'function') {
-            mostrarToast(`Analitica: ${err.message}`, 'error', 3200);
-        }
-    }
-}
