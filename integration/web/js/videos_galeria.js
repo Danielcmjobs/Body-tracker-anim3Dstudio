@@ -238,7 +238,8 @@ function crearVideoTarjeta(modulo, video) {
     videoEl.preload = 'metadata';
     videoEl.playsInline = true;
     videoEl.muted = true;
-    videoEl.src = buildVideoUrl(modulo, video);
+    // Usa data-src para lazy loading: el thumbnail se cargará cuando sea visible.
+    videoEl.setAttribute('data-src', buildVideoUrl(modulo, video));
 
     const overlay = document.createElement('div');
     overlay.className = 'video-thumb-overlay';
@@ -247,9 +248,11 @@ function crearVideoTarjeta(modulo, video) {
     overlayLabel.textContent = config?.nombre || 'Vídeo';
     overlay.appendChild(overlayLabel);
 
+    const videoUrl = buildVideoUrl(modulo, video);
+    
     thumbWrap.append(videoEl, overlay);
     thumbWrap.addEventListener('click', () => {
-        window.open(videoEl.src, '_blank', 'noopener,noreferrer');
+        window.open(videoUrl, '_blank', 'noopener,noreferrer');
     });
 
     const meta = document.createElement('div');
@@ -278,7 +281,7 @@ function crearVideoTarjeta(modulo, video) {
     btnAbrir.className = 'sensor-btn secondary-btn video-open-btn';
     btnAbrir.textContent = 'Ver en grande';
     btnAbrir.addEventListener('click', () => {
-        window.open(videoEl.src, '_blank', 'noopener,noreferrer');
+        window.open(videoUrl, '_blank', 'noopener,noreferrer');
     });
 
     const subtitulo = document.createElement('p');
@@ -496,6 +499,9 @@ function renderLibrary(modulo, payload) {
 
         container.appendChild(section);
     });
+
+    // Inicia lazy loading para todos los thumbnails de vídeo: cargarán cuando sean visibles.
+    LazyLoadHelper.observeElements('video.video-thumb', 'data-src');
 }
 
 async function cargarBiblioteca() {
@@ -520,13 +526,40 @@ async function cargarBiblioteca() {
         return;
     }
 
-    const estado = document.getElementById('videos-estado');
     const tipo = modulo === 'salto' ? getFiltroTipoSalto() : '';
     const usuario = getFiltroUsuario();
 
     galeriaState.cargando = true;
     setEstado('Cargando biblioteca...');
 
+    // Construye caché key basada en módulo, usuario y tipo.
+    const cacheKey = `${config.videosUrl('')}|modulo=${modulo}|usuario=${usuario}|tipo=${tipo}`;
+    const cached = CacheManager.get(cacheKey, { modulo, usuario, tipo });
+    if (cached) {
+        galeriaState.cargando = false;
+        galeriaState.modulo = modulo;
+        document.getElementById('library-title').textContent = config.titulo;
+        document.getElementById('library-subtitle').textContent = config.subtitulo;
+
+        const visibles = buildVisibleGroups(modulo, cached);
+        const totalVideos = visibles.reduce((acumulado, grupo) => {
+            if (grupo.category === 'comparativas') {
+                return acumulado + grupo.items.reduce((suma, item) => suma + (Array.isArray(item.videos) ? item.videos.length : 0), 0);
+            }
+            return acumulado + grupo.items.length;
+        }, 0);
+
+        let descripcion = `${totalVideos} vídeo${totalVideos === 1 ? '' : 's'} visibles (caché)`;
+        const totales = cached.totales || {};
+        if (totales.individuales !== undefined || totales.comparativas !== undefined) {
+            descripcion += ` · ${totales.individuales || 0} individuales, ${totales.comparativas || 0} comparativas`;
+        }
+        setEstado(descripcion);
+        renderLibrary(modulo, cached);
+        return;
+    }
+
+    // Si no está en caché, fetch desde backend.
     const params = new URLSearchParams();
     if (usuario) {
         params.set('id_usuario', usuario);
@@ -536,6 +569,10 @@ async function cargarBiblioteca() {
     }
 
     const payload = await fetchJson(config.videosUrl(params.toString()));
+
+    // Guarda en caché para evitar refetch dentro de 5 minutos.
+    CacheManager.set(cacheKey, payload, { modulo, usuario, tipo });
+
     galeriaState.cargando = false;
     galeriaState.modulo = modulo;
 
@@ -588,6 +625,12 @@ async function activarModulo(modulo, forzarRecarga = false) {
 }
 
 function conectarEventos() {
+    // Debouncida handler para evitar múltiples llamadas mientras el usuario interactúa.
+    const cargarBibliotecaDebouncida = GalleryHelper.debounce(() => {
+        if (!galeriaState.modulo) return;
+        cargarBiblioteca().catch((error) => setEstado(`Error: ${error.message}`, true));
+    }, 300);
+
     document.querySelectorAll('.module-option').forEach((button) => {
         button.addEventListener('click', () => {
             const modulo = button.dataset.module;
@@ -600,26 +643,19 @@ function conectarEventos() {
         });
     });
 
-    document.getElementById('filtro-usuario')?.addEventListener('change', () => {
-        if (!galeriaState.modulo) return;
-        cargarBiblioteca().catch((error) => setEstado(`Error: ${error.message}`, true));
-    });
+    // Listeners con debounce: evita cargar múltiples veces mientras el usuario cambia filtros.
+    document.getElementById('filtro-usuario')?.addEventListener('change', cargarBibliotecaDebouncida);
+    document.getElementById('filtro-categoria')?.addEventListener('change', cargarBibliotecaDebouncida);
+    document.getElementById('filtro-tipo-salto')?.addEventListener('change', cargarBibliotecaDebouncida);
 
-    document.getElementById('filtro-categoria')?.addEventListener('change', () => {
-        if (!galeriaState.modulo) return;
-        cargarBiblioteca().catch((error) => setEstado(`Error: ${error.message}`, true));
-    });
-
-    document.getElementById('filtro-tipo-salto')?.addEventListener('change', () => {
-        if (!galeriaState.modulo) return;
-        cargarBiblioteca().catch((error) => setEstado(`Error: ${error.message}`, true));
-    });
-
+    // Botón de actualizar: sin debounce, el usuario lo pulsa deliberadamente para refrescar.
     document.getElementById('btn-refrescar-videos')?.addEventListener('click', () => {
         if (!galeriaState.modulo) return;
+        CacheManager.clear(); // Limpia caché para forzar refetch.
         cargarBiblioteca().catch((error) => setEstado(`Error: ${error.message}`, true));
     });
 
+    // Reset de filtros: también sin debounce, es una acción deliberada.
     document.getElementById('btn-reset-filtros')?.addEventListener('click', () => {
         if (!galeriaState.modulo) return;
         resetFiltersForModule(galeriaState.modulo);

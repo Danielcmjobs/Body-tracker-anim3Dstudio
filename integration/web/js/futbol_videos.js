@@ -85,7 +85,8 @@ function crearCardVideo(video) {
     videoEl.className = 'video-player';
     videoEl.controls = true;
     videoEl.preload = 'metadata';
-    videoEl.src = `${getFutbolBaseUrl()}/api/videos/${video.id_golpeo}/stream`;
+    // Usa data-src para lazy loading: el video solo se cargará cuando sea visible.
+    videoEl.setAttribute('data-src', `${getFutbolBaseUrl()}/api/videos/${video.id_golpeo}/stream`);
 
     const controles = crearControlesVideo(videoEl);
 
@@ -132,6 +133,9 @@ function renderComparativas(comparativas) {
         card.append(titulo, meta, videosWrap);
         container.appendChild(card);
     });
+
+    // Inicia lazy loading para todos los videos: cargarán cuando sean visibles en pantalla.
+    LazyLoadHelper.observeElements('video.video-player', 'data-src');
 }
 
 function renderIndividuales(individuales) {
@@ -152,6 +156,9 @@ function renderIndividuales(individuales) {
     individuales.forEach((video) => {
         container.appendChild(crearCardVideo(video));
     });
+
+    // Inicia lazy loading para todos los videos: cargarán cuando sean visibles en pantalla.
+    LazyLoadHelper.observeElements('video.video-player', 'data-src');
 }
 
 async function cargarUsuarios() {
@@ -166,16 +173,31 @@ async function cargarUsuarios() {
 }
 
 async function cargarBiblioteca() {
-    const estado = document.getElementById('videos-estado');
     const usuario = document.getElementById('filtro-usuario')?.value || '';
 
     GalleryHelper.setEstado('videos-estado', 'Cargando biblioteca...');
 
+    // Intenta obtener del caché primero para evitar latencia innecesaria.
+    const baseUrl = `${getFutbolBaseUrl()}/api/videos`;
+    const cacheKey = `${baseUrl}|usuario=${usuario}`;
+    const cached = CacheManager.get(cacheKey, { usuario });
+    if (cached) {
+        renderComparativas(cached.comparativas || []);
+        renderIndividuales(cached.individuales || []);
+        const total = Number(cached.totales?.videos || 0);
+        GalleryHelper.setEstado('videos-estado', `${total} videos encontrados (caché).`);
+        return;
+    }
+
+    // Si no está en caché, fetch desde backend.
     const params = new URLSearchParams();
     if (usuario) params.set('id_usuario', usuario);
 
-    const url = `${getFutbolBaseUrl()}/api/videos${params.toString() ? `?${params.toString()}` : ''}`;
+    const url = params.toString() ? `${baseUrl}?${params.toString()}` : baseUrl;
     const payload = await fetchJsonFutbol(url);
+
+    // Guarda en caché para evitar refetch dentro de 5 minutos.
+    CacheManager.set(cacheKey, payload, { usuario });
 
     renderComparativas(payload.comparativas || []);
     renderIndividuales(payload.individuales || []);
@@ -188,6 +210,12 @@ document.addEventListener('DOMContentLoaded', async () => {
     const estado = document.getElementById('videos-estado');
     const btnRefrescar = document.getElementById('btn-refrescar-videos');
 
+    // Crea versión debouncida de cargarBiblioteca para evitar múltiples llamadas rápidas.
+    const cargarBibliotecaDebouncida = GalleryHelper.debounce(
+        () => cargarBiblioteca().catch((error) => GalleryHelper.setEstado('videos-estado', `Error: ${error.message}`, true)),
+        300
+    );
+
     try {
         await cargarUsuarios();
         await cargarBiblioteca();
@@ -195,11 +223,12 @@ document.addEventListener('DOMContentLoaded', async () => {
         GalleryHelper.setEstado('videos-estado', `Error: ${error.message}`, true);
     }
 
-    document.getElementById('filtro-usuario')?.addEventListener('change', () => {
-        cargarBiblioteca().catch((error) => GalleryHelper.setEstado('videos-estado', `Error: ${error.message}`, true));
-    });
+    // Listener con debounce: evita múltiples llamadas mientras el usuario sigue seleccionando.
+    document.getElementById('filtro-usuario')?.addEventListener('change', cargarBibliotecaDebouncida);
 
+    // Botón de actualizar manual: limpia caché y fuerza recarga desde backend.
     btnRefrescar?.addEventListener('click', () => {
+        CacheManager.clear();
         cargarBiblioteca().catch((error) => GalleryHelper.setEstado('videos-estado', `Error: ${error.message}`, true));
     });
 });
