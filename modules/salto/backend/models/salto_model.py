@@ -302,7 +302,7 @@ class SaltoModel:
             params.append(tipo_salto)
 
         sql = (
-            "SELECT s.id_salto, s.id_usuario, u.alias, s.tipo_salto, s.distancia_cm, "
+            "SELECT s.id_salto, s.id_usuario, u.alias, u.altura_m, u.peso_kg, s.tipo_salto, s.distancia_cm, "
             "s.tiempo_vuelo_s, s.metodo_origen, s.fecha_salto, "
             "v.video_nombre, v.video_mime, LENGTH(v.video_blob) AS tamano_bytes "
             "FROM v_saltos s "

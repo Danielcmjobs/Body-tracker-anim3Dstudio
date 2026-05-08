@@ -8,6 +8,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const indicador = document.getElementById('indicador-ia');
     const inputArchivo = document.getElementById('input-archivo-final');
     const labelVisual = document.getElementById('label-visual');
+    const selectorModoGrabacion = document.getElementById('modo-grabacion');
 
     let mediaRecorder = null;
     let chunks = [];
@@ -20,6 +21,32 @@ document.addEventListener('DOMContentLoaded', () => {
     const historialTiros = [];
     // Marca cada llamada a procesarVideo; descarta resultados de llamadas obsoletas.
     let analisisSeq = 0;
+    let ultimoModoGrabacion = selectorModoGrabacion ? selectorModoGrabacion.value : 'horizontal';
+    // Bloqueo de orientación: true cuando la cámara está en retrato.
+    let enModoPortrait = false;
+
+    // Muestra/oculta el overlay de orientación y bloquea el botón si la cámara
+    // está en retrato. Se llama cada vez que cambian las dimensiones del vídeo.
+    function comprobarOrientacion() {
+        const alertaEl = document.getElementById('alerta-orientacion');
+        const w = videoElement ? videoElement.videoWidth : 0;
+        const h = videoElement ? videoElement.videoHeight : 0;
+        if (!w || !h) { return; }
+        enModoPortrait = h > w;
+        if (alertaEl) { alertaEl.style.display = enModoPortrait ? 'flex' : 'none'; }
+        if (enModoPortrait && grabando) {
+            detenerGrabacion();
+        }
+        if (btnGrabar) {
+            if (enModoPortrait) {
+                btnGrabar.disabled = true;
+                if (btnText) { btnText.textContent = 'Gira el dispositivo'; }
+            } else if (!grabando) {
+                btnGrabar.disabled = false;
+                if (btnText) { btnText.textContent = 'Iniciar grabacion'; }
+            }
+        }
+    }
 
     // Muestra un toast informativo temporal.
     function mostrarToast(mensaje, tipo = 'info', duracionMs = 2200) {
@@ -44,11 +71,12 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         try {
-            stream = await navigator.mediaDevices.getUserMedia({
-                video: { facingMode: 'environment' },
-                audio: false
-            });
+            stream = await navigator.mediaDevices.getUserMedia(getCameraConstraints());
             videoElement.srcObject = stream;
+            // Comprobar orientación cuando el stream tenga dimensiones reales,
+            // y de nuevo si el usuario rota el dispositivo durante la sesión.
+            videoElement.addEventListener('loadedmetadata', comprobarOrientacion);
+            videoElement.addEventListener('resize', comprobarOrientacion);
             if (indicador) {
                 indicador.textContent = 'Motor listo';
                 indicador.classList.add('ia-lista');
@@ -67,27 +95,235 @@ document.addEventListener('DOMContentLoaded', () => {
         videoElement.srcObject = null;
     }
 
+    function getRecorderMimeType() {
+        if (MediaRecorder.isTypeSupported('video/webm; codecs=vp9')) {
+            return 'video/webm; codecs=vp9';
+        }
+        if (MediaRecorder.isTypeSupported('video/webm; codecs=vp8')) {
+            return 'video/webm; codecs=vp8';
+        }
+        return 'video/webm';
+    }
+
+    async function normalizarVideoSegunModo(videoBlob) {
+        const modo = getModoGrabacion();
+        if (!videoBlob || !videoBlob.size || typeof MediaRecorder === 'undefined') {
+            return videoBlob;
+        }
+
+        const url = URL.createObjectURL(videoBlob);
+        const video = document.createElement('video');
+        video.src = url;
+        video.muted = true;
+        video.playsInline = true;
+
+        try {
+            await new Promise((resolve, reject) => {
+                const onLoaded = () => {
+                    limpiar();
+                    resolve();
+                };
+                const onError = () => {
+                    limpiar();
+                    reject(new Error('No se pudo leer el video para normalizar orientacion.'));
+                };
+                const limpiar = () => {
+                    video.removeEventListener('loadedmetadata', onLoaded);
+                    video.removeEventListener('error', onError);
+                };
+                video.addEventListener('loadedmetadata', onLoaded);
+                video.addEventListener('error', onError);
+            });
+
+            const srcW = Number(video.videoWidth || 0);
+            const srcH = Number(video.videoHeight || 0);
+            if (!srcW || !srcH) {
+                return videoBlob;
+            }
+
+            const debeRotar = (modo === 'horizontal' && srcH > srcW) || (modo === 'vertical' && srcW > srcH);
+            if (!debeRotar) {
+                return videoBlob;
+            }
+
+            const canvas = document.createElement('canvas');
+            canvas.width = srcH;
+            canvas.height = srcW;
+            const ctx = canvas.getContext('2d');
+            if (!ctx) {
+                return videoBlob;
+            }
+
+            const streamCanvas = canvas.captureStream(30);
+            const mimeType = getRecorderMimeType();
+            const recorder = new MediaRecorder(streamCanvas, { mimeType });
+            const chunksNormalizados = [];
+
+            const finGrabacion = new Promise((resolve, reject) => {
+                recorder.ondataavailable = (event) => {
+                    if (event.data && event.data.size > 0) {
+                        chunksNormalizados.push(event.data);
+                    }
+                };
+                recorder.onerror = () => reject(new Error('No se pudo convertir el video al modo seleccionado.'));
+                recorder.onstop = () => {
+                    const blobNormalizado = chunksNormalizados.length
+                        ? new Blob(chunksNormalizados, { type: mimeType })
+                        : null;
+                    resolve(blobNormalizado);
+                };
+            });
+
+            const dibujarFrame = () => {
+                if (video.paused || video.ended) {
+                    return;
+                }
+                ctx.save();
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+                ctx.translate(canvas.width, 0);
+                ctx.rotate(Math.PI / 2);
+                ctx.drawImage(video, 0, 0, srcW, srcH);
+                ctx.restore();
+                requestAnimationFrame(dibujarFrame);
+            };
+
+            recorder.start(150);
+            video.currentTime = 0;
+            video.onplay = () => requestAnimationFrame(dibujarFrame);
+
+            await video.play();
+            await new Promise((resolve, reject) => {
+                const onEnded = () => {
+                    video.removeEventListener('ended', onEnded);
+                    video.removeEventListener('error', onError);
+                    resolve();
+                };
+                const onError = () => {
+                    video.removeEventListener('ended', onEnded);
+                    video.removeEventListener('error', onError);
+                    reject(new Error('Error reproduciendo el video para normalizar orientacion.'));
+                };
+                video.addEventListener('ended', onEnded);
+                video.addEventListener('error', onError);
+            });
+
+            recorder.stop();
+            const blobConvertido = await finGrabacion;
+            streamCanvas.getTracks().forEach((track) => track.stop());
+
+            if (blobConvertido && blobConvertido.size > 0) {
+                return blobConvertido;
+            }
+            return videoBlob;
+        } catch (_e) {
+            return videoBlob;
+        } finally {
+            video.pause();
+            video.removeAttribute('src');
+            URL.revokeObjectURL(url);
+        }
+    }
+
     // Arranca la grabacion con MediaRecorder.
     function getUsuarioActivo() {
         // Usar helper compartido (window.UsuarioActivo) si está disponible
         if (typeof window !== 'undefined' && window.UsuarioActivo) {
             const u = window.UsuarioActivo.obtener();
-            return u ? { idUsuario: u.idUsuario } : null;
+            const idUsuario = Number(u && u.idUsuario);
+            return Number.isFinite(idUsuario) && idUsuario > 0 ? { idUsuario } : null;
         }
         // Fallback: lectura directa (compatibilidad)
-        const idUsuario = sessionStorage.getItem('idUser');
-        if (!idUsuario) {
+        const rawIdUsuario = sessionStorage.getItem('idUser');
+        if (!rawIdUsuario) {
             return null;
         }
-        return { idUsuario: Number(idUsuario) };
+
+        let idUsuario = Number(rawIdUsuario);
+        if (!Number.isFinite(idUsuario)) {
+            try {
+                const parsed = JSON.parse(rawIdUsuario);
+                if (parsed) {
+                    idUsuario = Number(parsed.id_usuario || parsed.idUser || parsed.id || parsed);
+                }
+            } catch (_e) {
+                return null;
+            }
+        }
+
+        if (!Number.isFinite(idUsuario) || idUsuario <= 0) {
+            return null;
+        }
+
+        return { idUsuario };
     }
+
+    const COMPARATIVA_OBJETIVO = 4;
 
     function getPreferenciaGuardarVideo() {
         const opcion = document.querySelector('input[name="guardar-video-tiempo-real"]:checked');
         return opcion ? opcion.value : 'no';
     }
 
+    function getModoAnalisis() {
+        const selector = document.getElementById('modo-analisis');
+        return selector ? selector.value : 'individual';
+    }
+
+    function getModoGrabacion() {
+        return selectorModoGrabacion ? selectorModoGrabacion.value : 'horizontal';
+    }
+
+    function aplicarModoGrabacionUI() {
+        const body = document.body;
+        if (!body) {
+            return;
+        }
+        const modo = getModoGrabacion();
+        body.classList.remove('capture-vertical', 'capture-horizontal');
+        body.classList.add(modo === 'horizontal' ? 'capture-horizontal' : 'capture-vertical');
+    }
+
+    function getCameraConstraints() {
+        const modo = getModoGrabacion();
+        const esHorizontal = modo === 'horizontal';
+        return {
+            video: {
+                facingMode: 'environment',
+                width: { ideal: esHorizontal ? 1280 : 720 },
+                height: { ideal: esHorizontal ? 720 : 1280 }
+            },
+            audio: false
+        };
+    }
+
+    function actualizarBadgeComparativa() {
+        const badge = document.getElementById('comparativa-progreso');
+        if (!badge) {
+            return;
+        }
+
+        if (getModoAnalisis() !== 'comparativa') {
+            badge.style.display = 'none';
+            badge.textContent = '';
+            return;
+        }
+
+        badge.style.display = 'block';
+        const intentoActual = Math.min(historialTiros.length + 1, COMPARATIVA_OBJETIVO);
+        badge.textContent = `Tiro ${intentoActual}/${COMPARATIVA_OBJETIVO}`;
+    }
+
+    function resetComparativaSesion() {
+        historialTiros.length = 0;
+        actualizarComparativaSesion();
+        actualizarBadgeComparativa();
+    }
+
     async function iniciarGrabacion() {
+        if (enModoPortrait) {
+            mostrarToast('Gira el dispositivo a horizontal antes de grabar.', 'warn');
+            return;
+        }
         if (typeof MediaRecorder === 'undefined') {
             mostrarToast('La grabacion no esta soportada en este navegador.', 'error');
             return;
@@ -100,9 +336,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         chunks = [];
-        const mimeType = MediaRecorder.isTypeSupported('video/webm; codecs=vp9')
-            ? 'video/webm; codecs=vp9'
-            : 'video/webm';
+        const mimeType = getRecorderMimeType();
         mediaRecorder = new MediaRecorder(stream, { mimeType });
         // Acumula los fragmentos de video grabados.
         mediaRecorder.ondataavailable = (event) => {
@@ -143,27 +377,37 @@ document.addEventListener('DOMContentLoaded', () => {
             const usuario = getUsuarioActivo();
             const guardarVideo = getPreferenciaGuardarVideo() === 'si';
             const guardarBd = Boolean(usuario);
+            const modoGrabacion = getModoGrabacion();
+            const videoNormalizado = await normalizarVideoSegunModo(videoBlob);
 
             if (!usuario && guardarVideo) {
                 mostrarToast('Selecciona un usuario para guardar el video.', 'warn');
             }
 
-            const resultado = await analizarGolpeo(videoBlob, {
+            const resultado = await analizarGolpeo(videoNormalizado, {
                 idUsuario: usuario ? usuario.idUsuario : null,
                 guardarBd: guardarBd,
                 guardarVideoBd: guardarVideo && guardarBd,
-                metodoOrigen: metodoOrigen
+                metodoOrigen: metodoOrigen,
+                modoGrabacion: modoGrabacion
             });
 
             // Si llegó otro analisis mientras esperabamos, descartamos este.
             if (seq !== analisisSeq) {
                 return;
             }
-            ultimoVideoBlob = videoBlob;
-            pintarResultados(resultado, videoBlob);
+            ultimoVideoBlob = videoNormalizado;
+            pintarResultados(resultado, videoNormalizado);
             // Vista local con landmarks para reproducir el video analizado en el navegador.
             if (window.futbolLandmarksPreview && typeof window.futbolLandmarksPreview.setVideoBlob === 'function') {
-                window.futbolLandmarksPreview.setVideoBlob(videoBlob);
+                window.futbolLandmarksPreview.setVideoBlob(videoNormalizado);
+            }
+            // Pasar frames con landmarks al visor 3D.
+            if (window.futbolLandmarksPreview && typeof window.futbolLandmarksPreview.set3DFrames === 'function') {
+                window.futbolLandmarksPreview.set3DFrames(
+                    Array.isArray(resultado.landmarks_frames) ? resultado.landmarks_frames : [],
+                    resultado.frame_impacto ?? null
+                );
             }
             mostrarToast('Analisis completado', 'success');
         } catch (error) {
@@ -357,7 +601,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const panel = document.getElementById('panel-analitica');
         if (!panel) return;
         try {
-            const [fatiga, tendencia, comparativa] = await Promise.all([
+            let [fatiga, tendencia, comparativa] = await Promise.all([
                 obtenerFatigaUsuarioFutbol(idUsuario),
                 obtenerTendenciaUsuarioFutbol(idUsuario),
                 obtenerComparativaUsuarioFutbol(idUsuario, 4),
@@ -423,6 +667,14 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Registra el tiro en el historial de sesión (máx. 4) y actualiza la tabla.
     function registrarTiroSesion(data) {
+        const modo = getModoAnalisis();
+        if (modo !== 'comparativa') {
+            historialTiros.length = 0;
+            actualizarComparativaSesion();
+            actualizarBadgeComparativa();
+            return;
+        }
+
         historialTiros.push({
             score_compuesto: data.score_compuesto,
             velocidad_pie_ms: data.velocidad_pie_ms,
@@ -432,10 +684,14 @@ document.addEventListener('DOMContentLoaded', () => {
             angulo_tobillo_deg: data.angulo_tobillo_deg,
             clasificacion: data.clasificacion,
         });
-        if (historialTiros.length > 4) {
+        if (historialTiros.length > COMPARATIVA_OBJETIVO) {
             historialTiros.shift();
         }
         actualizarComparativaSesion();
+        actualizarBadgeComparativa();
+        if (historialTiros.length === COMPARATIVA_OBJETIVO) {
+            mostrarToast('Comparativa de 4 tiros completada.', 'success', 2600);
+        }
     }
 
     // Pinta la tabla de comparativa de la sesión.
@@ -443,6 +699,12 @@ document.addEventListener('DOMContentLoaded', () => {
         const panel = document.getElementById('panel-comparativa-sesion');
         const tbody = document.getElementById('tbody-comparativa-sesion');
         if (!panel || !tbody) return;
+
+        if (getModoAnalisis() !== 'comparativa') {
+            panel.style.display = 'none';
+            tbody.innerHTML = '';
+            return;
+        }
 
         tbody.innerHTML = '';
         historialTiros.forEach((t, i) => {
@@ -473,29 +735,8 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    // Helpers robustos de formateo
-    function formatearNumero(valor, decimales = 2) {
-        if (valor === null || valor === undefined || Number.isNaN(Number(valor))) {
-            return '--';
-        }
-        return Number(valor).toFixed(decimales);
-    }
-
-    function formatearGrados(valor) {
-        if (valor === null || valor === undefined || Number.isNaN(Number(valor))) {
-            return '-- deg';
-        }
-        return `${Number(valor).toFixed(1)} deg`;
-    }
-
-    // Helper defensivo para score compuesto (0-100 o --)
-    function formatearScore(score) {
-        if (score === null || score === undefined || Number.isNaN(Number(score))) {
-            return '--';
-        }
-        const s = Number(score);
-        return s >= 0 && s <= 100 ? formatearNumero(s, 1) : '--';
-    }
+    // Helpers robustos de formateo — delegated to shared/formatters.js
+    // formatearNumero, formatearGrados, formatearScore are provided by shared formatter
 
     if (btnGrabar) {
         // Alterna entre iniciar y detener la grabacion.
@@ -531,6 +772,23 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
+    if (selectorModoGrabacion) {
+        selectorModoGrabacion.addEventListener('change', async () => {
+            const nuevoModo = getModoGrabacion();
+            if (grabando) {
+                selectorModoGrabacion.value = ultimoModoGrabacion;
+                mostrarToast('Deten la grabacion antes de cambiar el modo.', 'warn');
+                return;
+            }
+
+            ultimoModoGrabacion = nuevoModo;
+            aplicarModoGrabacionUI();
+            detenerCamara();
+            await iniciarCamara();
+        });
+    }
+
+    aplicarModoGrabacionUI();
     iniciarCamara();
 
     // Botón de vídeo anotado
@@ -541,10 +799,28 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Panel analítico — carga al seleccionar usuario
     // Crear handler nombrado para evitar duplicados al navegar
+    async function actualizarAnaliticaActiva({ mostrarErrores = false } = {}) {
+        const usuario = getUsuarioActivo();
+        if (!usuario) {
+            // Si no hay usuario, limpiar panel analitica y salir
+            try {
+                const panel = document.getElementById('panel-analitica');
+                if (panel) panel.style.display = 'none';
+            } catch (_e) {}
+            return;
+        }
+        try {
+            await cargarAnaliticaUsuario(usuario.idUsuario);
+        } catch (err) {
+            if (mostrarErrores && typeof mostrarToast === 'function') {
+                mostrarToast(err.message || 'Error cargando analítica', 'error');
+            }
+        }
+    }
+
     const handleUsuarioChange = () => {
-        historialTiros.length = 0;  // LIMPIAR historial del usuario anterior
-        actualizarComparativaSesion();  // Redibuja tabla vacía
-        cargarAnaliticaFutbol().catch(() => {});
+        resetComparativaSesion();
+        actualizarAnaliticaActiva().catch(() => {});
     };
     // Remover listener anterior si existe (evita duplicados)
     document.removeEventListener('usuarioSeleccionCambio', handleUsuarioChange);
@@ -554,7 +830,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const btnActAnalitica = document.getElementById('btn-actualizar-analitica');
     if (btnActAnalitica) {
         btnActAnalitica.addEventListener('click', () => {
-            cargarAnaliticaFutbol({ mostrarErrores: true }).catch(() => {});
+            actualizarAnaliticaActiva({ mostrarErrores: true }).catch(() => {});
         });
     }
 
@@ -567,13 +843,19 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
+    document.getElementById('modo-analisis')?.addEventListener('change', () => {
+        resetComparativaSesion();
+    });
+
     // Panel analítico — cambio de métrica
     const selectMetrica = document.getElementById('metrica-analitica');
     if (selectMetrica) {
         selectMetrica.addEventListener('change', () => {
-            cargarAnaliticaFutbol().catch(() => {});
+            actualizarAnaliticaActiva().catch(() => {});
         });
     }
+
+    actualizarBadgeComparativa();
 
     // Asegura que la camara se libere al salir.
     window.addEventListener('beforeunload', () => {

@@ -78,7 +78,7 @@ SCORE_PESOS_GOLPEO: dict[str, float] = {
 # Rangos de referencia para normalización de cada métrica (min, max óptimo).
 SCORE_RANGOS_GOLPEO: dict[str, tuple[float, float]] = {
     "velocidad_pie_ms":   (2.0, 18.0),   # m/s — 2 muy lento, 18 élite
-    "estabilidad_tronco": (0.3, 1.0),    # índice 0..1
+    "estabilidad_tronco": (30.0, 100.0),  # score 0..100 (igual que calculo_service)
     "confianza":          (0.5, 1.0),    # índice MediaPipe 0..1
     "angulo_cadera_deg":  (90.0, 160.0), # °  — rango técnico aceptable
 }

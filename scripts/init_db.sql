@@ -20,15 +20,7 @@ CREATE TABLE IF NOT EXISTS usuarios (
     fecha_registro DATETIME   DEFAULT CURRENT_TIMESTAMP
 ) ENGINE=InnoDB;
 
--- Nueva tabla para usuarios de fútbol
-CREATE TABLE IF NOT EXISTS usuarios_futbol (
-    id INT AUTO_INCREMENT,
-    alias VARCHAR(50) NOT NULL,
-    nombre VARCHAR(120) NOT NULL,
-    fecha_creacion TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    UNIQUE KEY uq_usuarios_futbol_alias (alias),
-    PRIMARY KEY (id)
-) ENGINE=InnoDB;
+-- El modulo futbol comparte la tabla `usuarios` del modulo salto.
 
 -- ── Tabla de saltos ──
 
@@ -75,7 +67,7 @@ CREATE TABLE IF NOT EXISTS golpes_futbol (
     video_mime VARCHAR(100),
     video_blob MEDIUMBLOB,
     PRIMARY KEY (id_golpeo),
-    FOREIGN KEY (id_usuario) REFERENCES usuarios_futbol(id) ON DELETE CASCADE
+    FOREIGN KEY (id_usuario) REFERENCES usuarios(id_usuario) ON DELETE CASCADE
 ) ENGINE=InnoDB;
 
 -- ── Índice para consultas por usuario ──
@@ -83,32 +75,6 @@ CREATE TABLE IF NOT EXISTS golpes_futbol (
 CREATE INDEX IF NOT EXISTS idx_saltos_usuario ON saltos(id_usuario);
 
 CREATE INDEX IF NOT EXISTS idx_golpes_usuario ON golpes_futbol(id_usuario);
-
--- ── Migraciones: columnas basicas en usuarios_futbol ──
-
-SET @col_exists = (
-    SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
-    WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'usuarios_futbol' AND COLUMN_NAME = 'alias'
-);
-SET @sql = IF(@col_exists = 0,
-    'ALTER TABLE usuarios_futbol ADD COLUMN alias VARCHAR(50) NULL',
-    'SELECT 1'
-);
-PREPARE stmt FROM @sql;
-EXECUTE stmt;
-DEALLOCATE PREPARE stmt;
-
-SET @col_exists = (
-    SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
-    WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'usuarios_futbol' AND COLUMN_NAME = 'nombre'
-);
-SET @sql = IF(@col_exists = 0,
-    'ALTER TABLE usuarios_futbol ADD COLUMN nombre VARCHAR(120) NULL',
-    'SELECT 1'
-);
-PREPARE stmt FROM @sql;
-EXECUTE stmt;
-DEALLOCATE PREPARE stmt;
 
 -- ── Migración: añadir peso_kg si no existe (entornos ya desplegados) ──
 
@@ -324,76 +290,3 @@ EXECUTE stmt;
 DEALLOCATE PREPARE stmt;
 
 
--- ── Migraciones: columnas avanzadas de golpes_futbol (analítica nivel salto) ──
-
-SET @col_exists = (
-    SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
-    WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'golpes_futbol' AND COLUMN_NAME = 'velocidad_pie_ms'
-);
-SET @sql = IF(@col_exists = 0,
-    'ALTER TABLE golpes_futbol ADD COLUMN velocidad_pie_ms DECIMAL(6,2) NULL AFTER estabilidad_tronco',
-    'SELECT 1'
-);
-PREPARE stmt FROM @sql;
-EXECUTE stmt;
-DEALLOCATE PREPARE stmt;
-
-SET @col_exists = (
-    SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
-    WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'golpes_futbol' AND COLUMN_NAME = 'frame_impacto'
-);
-SET @sql = IF(@col_exists = 0,
-    'ALTER TABLE golpes_futbol ADD COLUMN frame_impacto INT NULL AFTER velocidad_pie_ms',
-    'SELECT 1'
-);
-PREPARE stmt FROM @sql;
-EXECUTE stmt;
-DEALLOCATE PREPARE stmt;
-
-SET @col_exists = (
-    SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
-    WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'golpes_futbol' AND COLUMN_NAME = 'curvas_json'
-);
-SET @sql = IF(@col_exists = 0,
-    'ALTER TABLE golpes_futbol ADD COLUMN curvas_json JSON NULL AFTER frame_impacto',
-    'SELECT 1'
-);
-PREPARE stmt FROM @sql;
-EXECUTE stmt;
-DEALLOCATE PREPARE stmt;
-
-SET @col_exists = (
-    SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
-    WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'golpes_futbol' AND COLUMN_NAME = 'landmarks_json'
-);
-SET @sql = IF(@col_exists = 0,
-    'ALTER TABLE golpes_futbol ADD COLUMN landmarks_json JSON NULL AFTER curvas_json',
-    'SELECT 1'
-);
-PREPARE stmt FROM @sql;
-EXECUTE stmt;
-DEALLOCATE PREPARE stmt;
-
-SET @col_exists = (
-    SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
-    WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'golpes_futbol' AND COLUMN_NAME = 'alertas_json'
-);
-SET @sql = IF(@col_exists = 0,
-    'ALTER TABLE golpes_futbol ADD COLUMN alertas_json JSON NULL AFTER landmarks_json',
-    'SELECT 1'
-);
-PREPARE stmt FROM @sql;
-EXECUTE stmt;
-DEALLOCATE PREPARE stmt;
-
-SET @col_exists = (
-    SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
-    WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'golpes_futbol' AND COLUMN_NAME = 'clasificacion'
-);
-SET @sql = IF(@col_exists = 0,
-    'ALTER TABLE golpes_futbol ADD COLUMN clasificacion VARCHAR(50) NULL AFTER alertas_json',
-    'SELECT 1'
-);
-PREPARE stmt FROM @sql;
-EXECUTE stmt;
-DEALLOCATE PREPARE stmt;

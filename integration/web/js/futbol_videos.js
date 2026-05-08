@@ -1,26 +1,3 @@
-function formatearFecha(fechaIso) {
-    if (!fechaIso) {
-        return 'Sin fecha';
-    }
-    const fecha = new Date(fechaIso);
-    if (Number.isNaN(fecha.getTime())) {
-        return 'Sin fecha';
-    }
-    return fecha.toLocaleString('es-ES', {
-        year: 'numeric',
-        month: '2-digit',
-        day: '2-digit',
-        hour: '2-digit',
-        minute: '2-digit'
-    });
-}
-
-function formatearNumero(valor, decimales = 1) {
-    if (valor === null || valor === undefined || Number.isNaN(Number(valor))) {
-        return '--';
-    }
-    return Number(valor).toFixed(decimales);
-}
 
 function crearControlesVideo(videoEl) {
     const controles = document.createElement('div');
@@ -85,7 +62,8 @@ function crearCardVideo(video) {
     videoEl.className = 'video-player';
     videoEl.controls = true;
     videoEl.preload = 'metadata';
-    videoEl.src = `${getFutbolBaseUrl()}/api/videos/${video.id_golpeo}/stream`;
+    // Usa data-src para lazy loading: el video solo se cargará cuando sea visible.
+    videoEl.setAttribute('data-src', `${getFutbolBaseUrl()}/api/videos/${video.id_golpeo}/stream`);
 
     const controles = crearControlesVideo(videoEl);
 
@@ -132,6 +110,9 @@ function renderComparativas(comparativas) {
         card.append(titulo, meta, videosWrap);
         container.appendChild(card);
     });
+
+    // Inicia lazy loading para todos los videos: cargarán cuando sean visibles en pantalla.
+    LazyLoadHelper.observeElements('video.video-player', 'data-src');
 }
 
 function renderIndividuales(individuales) {
@@ -152,87 +133,79 @@ function renderIndividuales(individuales) {
     individuales.forEach((video) => {
         container.appendChild(crearCardVideo(video));
     });
+
+    // Inicia lazy loading para todos los videos: cargarán cuando sean visibles en pantalla.
+    LazyLoadHelper.observeElements('video.video-player', 'data-src');
 }
 
 async function cargarUsuarios() {
-    const select = document.getElementById('filtro-usuario');
-    if (!select) {
-        return;
-    }
-
-    select.innerHTML = '';
-
-    const optionTodos = document.createElement('option');
-    optionTodos.value = '';
-    optionTodos.textContent = 'Todos los usuarios';
-    select.appendChild(optionTodos);
-
-    const payload = await fetchJsonFutbol(`${getFutbolBaseUrl()}/api/usuarios_futbol?paginado=1&limit=200&offset=0`);
-    const usuarios = Array.isArray(payload) ? payload : (payload.usuarios || payload.items || []);
-
-    usuarios
-        .sort((a, b) => String(a.alias || '').localeCompare(String(b.alias || '')))
-        .forEach((u) => {
-            const opt = document.createElement('option');
-            opt.value = String(u.id_usuario);
-            const nombre = u.alias || u.nombre_completo || u.nombre || 'Usuario';
-            opt.textContent = `${nombre} (ID ${u.id_usuario})`;
-            select.appendChild(opt);
-        });
+    return GalleryHelper.fetchAndPopulateUsers({
+        url: `${getFutbolBaseUrl()}/api/usuarios_futbol`,
+        selectId: 'filtro-usuario',
+        isPaginated: true,
+        pageSize: 100,
+        transformItem: (u) => ({ value: String(u.id_usuario), text: `${u.alias || u.nombre_completo || u.nombre || 'Usuario'} (ID ${u.id_usuario})` }),
+        fetchFn: fetchJsonFutbol,
+    });
 }
 
 async function cargarBiblioteca() {
-    const estado = document.getElementById('videos-estado');
     const usuario = document.getElementById('filtro-usuario')?.value || '';
 
-    if (estado) {
-        estado.textContent = 'Cargando biblioteca...';
+    GalleryHelper.setEstado('videos-estado', 'Cargando biblioteca...');
+
+    // Intenta obtener del caché primero para evitar latencia innecesaria.
+    const baseUrl = `${getFutbolBaseUrl()}/api/videos`;
+    const cacheKey = `${baseUrl}|usuario=${usuario}`;
+    const cached = CacheManager.get(cacheKey, { usuario });
+    if (cached) {
+        renderComparativas(cached.comparativas || []);
+        renderIndividuales(cached.individuales || []);
+        const total = Number(cached.totales?.videos || 0);
+        GalleryHelper.setEstado('videos-estado', `${total} videos encontrados (caché).`);
+        return;
     }
 
+    // Si no está en caché, fetch desde backend.
     const params = new URLSearchParams();
     if (usuario) params.set('id_usuario', usuario);
 
-    const url = `${getFutbolBaseUrl()}/api/videos${params.toString() ? `?${params.toString()}` : ''}`;
+    const url = params.toString() ? `${baseUrl}?${params.toString()}` : baseUrl;
     const payload = await fetchJsonFutbol(url);
+
+    // Guarda en caché para evitar refetch dentro de 5 minutos.
+    CacheManager.set(cacheKey, payload, { usuario });
 
     renderComparativas(payload.comparativas || []);
     renderIndividuales(payload.individuales || []);
 
-    if (estado) {
-        const total = Number(payload.totales?.videos || 0);
-        estado.textContent = `${total} videos encontrados.`;
-    }
+    const total = Number(payload.totales?.videos || 0);
+    GalleryHelper.setEstado('videos-estado', `${total} videos encontrados.`);
 }
 
 document.addEventListener('DOMContentLoaded', async () => {
     const estado = document.getElementById('videos-estado');
     const btnRefrescar = document.getElementById('btn-refrescar-videos');
 
+    // Crea versión debouncida de cargarBiblioteca para evitar múltiples llamadas rápidas.
+    const cargarBibliotecaDebouncida = GalleryHelper.debounce(
+        () => cargarBiblioteca().catch((error) => GalleryHelper.setEstado('videos-estado', `Error: ${error.message}`, true)),
+        300
+    );
+
     try {
         await cargarUsuarios();
         await cargarBiblioteca();
     } catch (error) {
-        if (estado) {
-            estado.textContent = `Error: ${error.message}`;
-            estado.style.color = '#ff6b6b';
-        }
+        GalleryHelper.setEstado('videos-estado', `Error: ${error.message}`, true);
     }
 
-    document.getElementById('filtro-usuario')?.addEventListener('change', () => {
-        cargarBiblioteca().catch((error) => {
-            if (estado) {
-                estado.textContent = `Error: ${error.message}`;
-                estado.style.color = '#ff6b6b';
-            }
-        });
-    });
+    // Listener con debounce: evita múltiples llamadas mientras el usuario sigue seleccionando.
+    document.getElementById('filtro-usuario')?.addEventListener('change', cargarBibliotecaDebouncida);
 
+    // Botón de actualizar manual: limpia caché y fuerza recarga desde backend.
     btnRefrescar?.addEventListener('click', () => {
-        cargarBiblioteca().catch((error) => {
-            if (estado) {
-                estado.textContent = `Error: ${error.message}`;
-                estado.style.color = '#ff6b6b';
-            }
-        });
+        CacheManager.clear();
+        cargarBiblioteca().catch((error) => GalleryHelper.setEstado('videos-estado', `Error: ${error.message}`, true));
     });
 });

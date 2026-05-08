@@ -2036,13 +2036,20 @@ document.addEventListener('videoListo', async (evento) => {
     formData.append('tipo_salto', tipoSalto);
     formData.append('altura_real_m', alturaUsuario);
 
+    // Preferencia de guardado (misma que el flujo en tiempo real)
+    const guardarVideo = getPreferenciaGuardarVideoTiempoReal() === 'si';
+    formData.append('guardar_video_bd', guardarVideo ? 'true' : 'false');
+
+    // Indicar el origen (galería) siempre para que el backend registre el origen
+    formData.append('metodo_origen', 'video_galeria');
+
     if (idUsuario) {
         const idNum = Number(idUsuario);
         if (Number.isFinite(idNum) && idNum > 0) {
             formData.append('id_usuario', String(idNum));
         }
-        formData.append('metodo_origen', 'video_galeria');
     }
+
     // Mantiene el mismo contrato de salida que tiempo real para visor landmarks.
     formData.append('incluir_landmarks', 'true');
 
