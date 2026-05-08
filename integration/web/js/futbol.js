@@ -8,6 +8,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const indicador = document.getElementById('indicador-ia');
     const inputArchivo = document.getElementById('input-archivo-final');
     const labelVisual = document.getElementById('label-visual');
+    const selectorModoGrabacion = document.getElementById('modo-grabacion');
 
     let mediaRecorder = null;
     let chunks = [];
@@ -20,6 +21,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const historialTiros = [];
     // Marca cada llamada a procesarVideo; descarta resultados de llamadas obsoletas.
     let analisisSeq = 0;
+    let ultimoModoGrabacion = selectorModoGrabacion ? selectorModoGrabacion.value : 'vertical';
 
     // Muestra un toast informativo temporal.
     function mostrarToast(mensaje, tipo = 'info', duracionMs = 2200) {
@@ -44,10 +46,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         try {
-            stream = await navigator.mediaDevices.getUserMedia({
-                video: { facingMode: 'environment' },
-                audio: false
-            });
+            stream = await navigator.mediaDevices.getUserMedia(getCameraConstraints());
             videoElement.srcObject = stream;
             if (indicador) {
                 indicador.textContent = 'Motor listo';
@@ -65,6 +64,135 @@ document.addEventListener('DOMContentLoaded', () => {
             stream = null;
         }
         videoElement.srcObject = null;
+    }
+
+    function getRecorderMimeType() {
+        if (MediaRecorder.isTypeSupported('video/webm; codecs=vp9')) {
+            return 'video/webm; codecs=vp9';
+        }
+        if (MediaRecorder.isTypeSupported('video/webm; codecs=vp8')) {
+            return 'video/webm; codecs=vp8';
+        }
+        return 'video/webm';
+    }
+
+    async function normalizarVideoSegunModo(videoBlob) {
+        const modo = getModoGrabacion();
+        if (!videoBlob || !videoBlob.size || typeof MediaRecorder === 'undefined') {
+            return videoBlob;
+        }
+
+        const url = URL.createObjectURL(videoBlob);
+        const video = document.createElement('video');
+        video.src = url;
+        video.muted = true;
+        video.playsInline = true;
+
+        try {
+            await new Promise((resolve, reject) => {
+                const onLoaded = () => {
+                    limpiar();
+                    resolve();
+                };
+                const onError = () => {
+                    limpiar();
+                    reject(new Error('No se pudo leer el video para normalizar orientacion.'));
+                };
+                const limpiar = () => {
+                    video.removeEventListener('loadedmetadata', onLoaded);
+                    video.removeEventListener('error', onError);
+                };
+                video.addEventListener('loadedmetadata', onLoaded);
+                video.addEventListener('error', onError);
+            });
+
+            const srcW = Number(video.videoWidth || 0);
+            const srcH = Number(video.videoHeight || 0);
+            if (!srcW || !srcH) {
+                return videoBlob;
+            }
+
+            const debeRotar = (modo === 'horizontal' && srcH > srcW) || (modo === 'vertical' && srcW > srcH);
+            if (!debeRotar) {
+                return videoBlob;
+            }
+
+            const canvas = document.createElement('canvas');
+            canvas.width = srcH;
+            canvas.height = srcW;
+            const ctx = canvas.getContext('2d');
+            if (!ctx) {
+                return videoBlob;
+            }
+
+            const streamCanvas = canvas.captureStream(30);
+            const mimeType = getRecorderMimeType();
+            const recorder = new MediaRecorder(streamCanvas, { mimeType });
+            const chunksNormalizados = [];
+
+            const finGrabacion = new Promise((resolve, reject) => {
+                recorder.ondataavailable = (event) => {
+                    if (event.data && event.data.size > 0) {
+                        chunksNormalizados.push(event.data);
+                    }
+                };
+                recorder.onerror = () => reject(new Error('No se pudo convertir el video al modo seleccionado.'));
+                recorder.onstop = () => {
+                    const blobNormalizado = chunksNormalizados.length
+                        ? new Blob(chunksNormalizados, { type: mimeType })
+                        : null;
+                    resolve(blobNormalizado);
+                };
+            });
+
+            const dibujarFrame = () => {
+                if (video.paused || video.ended) {
+                    return;
+                }
+                ctx.save();
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+                ctx.translate(canvas.width, 0);
+                ctx.rotate(Math.PI / 2);
+                ctx.drawImage(video, 0, 0, srcW, srcH);
+                ctx.restore();
+                requestAnimationFrame(dibujarFrame);
+            };
+
+            recorder.start(150);
+            video.currentTime = 0;
+            video.onplay = () => requestAnimationFrame(dibujarFrame);
+
+            await video.play();
+            await new Promise((resolve, reject) => {
+                const onEnded = () => {
+                    video.removeEventListener('ended', onEnded);
+                    video.removeEventListener('error', onError);
+                    resolve();
+                };
+                const onError = () => {
+                    video.removeEventListener('ended', onEnded);
+                    video.removeEventListener('error', onError);
+                    reject(new Error('Error reproduciendo el video para normalizar orientacion.'));
+                };
+                video.addEventListener('ended', onEnded);
+                video.addEventListener('error', onError);
+            });
+
+            recorder.stop();
+            const blobConvertido = await finGrabacion;
+            streamCanvas.getTracks().forEach((track) => track.stop());
+
+            if (blobConvertido && blobConvertido.size > 0) {
+                return blobConvertido;
+            }
+            return videoBlob;
+        } catch (_e) {
+            return videoBlob;
+        } finally {
+            video.pause();
+            video.removeAttribute('src');
+            URL.revokeObjectURL(url);
+        }
     }
 
     // Arranca la grabacion con MediaRecorder.
@@ -112,6 +240,33 @@ document.addEventListener('DOMContentLoaded', () => {
         return selector ? selector.value : 'individual';
     }
 
+    function getModoGrabacion() {
+        return selectorModoGrabacion ? selectorModoGrabacion.value : 'vertical';
+    }
+
+    function aplicarModoGrabacionUI() {
+        const body = document.body;
+        if (!body) {
+            return;
+        }
+        const modo = getModoGrabacion();
+        body.classList.remove('capture-vertical', 'capture-horizontal');
+        body.classList.add(modo === 'horizontal' ? 'capture-horizontal' : 'capture-vertical');
+    }
+
+    function getCameraConstraints() {
+        const modo = getModoGrabacion();
+        const esHorizontal = modo === 'horizontal';
+        return {
+            video: {
+                facingMode: 'environment',
+                width: { ideal: esHorizontal ? 1280 : 720 },
+                height: { ideal: esHorizontal ? 720 : 1280 }
+            },
+            audio: false
+        };
+    }
+
     function actualizarBadgeComparativa() {
         const badge = document.getElementById('comparativa-progreso');
         if (!badge) {
@@ -148,9 +303,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         chunks = [];
-        const mimeType = MediaRecorder.isTypeSupported('video/webm; codecs=vp9')
-            ? 'video/webm; codecs=vp9'
-            : 'video/webm';
+        const mimeType = getRecorderMimeType();
         mediaRecorder = new MediaRecorder(stream, { mimeType });
         // Acumula los fragmentos de video grabados.
         mediaRecorder.ondataavailable = (event) => {
@@ -191,27 +344,30 @@ document.addEventListener('DOMContentLoaded', () => {
             const usuario = getUsuarioActivo();
             const guardarVideo = getPreferenciaGuardarVideo() === 'si';
             const guardarBd = Boolean(usuario);
+            const modoGrabacion = getModoGrabacion();
+            const videoNormalizado = await normalizarVideoSegunModo(videoBlob);
 
             if (!usuario && guardarVideo) {
                 mostrarToast('Selecciona un usuario para guardar el video.', 'warn');
             }
 
-            const resultado = await analizarGolpeo(videoBlob, {
+            const resultado = await analizarGolpeo(videoNormalizado, {
                 idUsuario: usuario ? usuario.idUsuario : null,
                 guardarBd: guardarBd,
                 guardarVideoBd: guardarVideo && guardarBd,
-                metodoOrigen: metodoOrigen
+                metodoOrigen: metodoOrigen,
+                modoGrabacion: modoGrabacion
             });
 
             // Si llegó otro analisis mientras esperabamos, descartamos este.
             if (seq !== analisisSeq) {
                 return;
             }
-            ultimoVideoBlob = videoBlob;
-            pintarResultados(resultado, videoBlob);
+            ultimoVideoBlob = videoNormalizado;
+            pintarResultados(resultado, videoNormalizado);
             // Vista local con landmarks para reproducir el video analizado en el navegador.
             if (window.futbolLandmarksPreview && typeof window.futbolLandmarksPreview.setVideoBlob === 'function') {
-                window.futbolLandmarksPreview.setVideoBlob(videoBlob);
+                window.futbolLandmarksPreview.setVideoBlob(videoNormalizado);
             }
             mostrarToast('Analisis completado', 'success');
         } catch (error) {
@@ -576,6 +732,23 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
+    if (selectorModoGrabacion) {
+        selectorModoGrabacion.addEventListener('change', async () => {
+            const nuevoModo = getModoGrabacion();
+            if (grabando) {
+                selectorModoGrabacion.value = ultimoModoGrabacion;
+                mostrarToast('Deten la grabacion antes de cambiar el modo.', 'warn');
+                return;
+            }
+
+            ultimoModoGrabacion = nuevoModo;
+            aplicarModoGrabacionUI();
+            detenerCamara();
+            await iniciarCamara();
+        });
+    }
+
+    aplicarModoGrabacionUI();
     iniciarCamara();
 
     // Botón de vídeo anotado

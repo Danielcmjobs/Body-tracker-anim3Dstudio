@@ -69,6 +69,9 @@ async function analizarGolpeo(videoBlob, opciones = {}) {
     if (opciones.metodoOrigen) {
         formData.append('metodo_origen', String(opciones.metodoOrigen));
     }
+    if (opciones.modoGrabacion) {
+        formData.append('modo_grabacion', String(opciones.modoGrabacion));
+    }
     if (opciones.incluirLandmarks) {
         formData.append('incluir_landmarks', 'true');
     }
