@@ -21,7 +21,32 @@ document.addEventListener('DOMContentLoaded', () => {
     const historialTiros = [];
     // Marca cada llamada a procesarVideo; descarta resultados de llamadas obsoletas.
     let analisisSeq = 0;
-    let ultimoModoGrabacion = selectorModoGrabacion ? selectorModoGrabacion.value : 'vertical';
+    let ultimoModoGrabacion = selectorModoGrabacion ? selectorModoGrabacion.value : 'horizontal';
+    // Bloqueo de orientación: true cuando la cámara está en retrato.
+    let enModoPortrait = false;
+
+    // Muestra/oculta el overlay de orientación y bloquea el botón si la cámara
+    // está en retrato. Se llama cada vez que cambian las dimensiones del vídeo.
+    function comprobarOrientacion() {
+        const alertaEl = document.getElementById('alerta-orientacion');
+        const w = videoElement ? videoElement.videoWidth : 0;
+        const h = videoElement ? videoElement.videoHeight : 0;
+        if (!w || !h) { return; }
+        enModoPortrait = h > w;
+        if (alertaEl) { alertaEl.style.display = enModoPortrait ? 'flex' : 'none'; }
+        if (enModoPortrait && grabando) {
+            detenerGrabacion();
+        }
+        if (btnGrabar) {
+            if (enModoPortrait) {
+                btnGrabar.disabled = true;
+                if (btnText) { btnText.textContent = 'Gira el dispositivo'; }
+            } else if (!grabando) {
+                btnGrabar.disabled = false;
+                if (btnText) { btnText.textContent = 'Iniciar grabacion'; }
+            }
+        }
+    }
 
     // Muestra un toast informativo temporal.
     function mostrarToast(mensaje, tipo = 'info', duracionMs = 2200) {
@@ -48,6 +73,10 @@ document.addEventListener('DOMContentLoaded', () => {
         try {
             stream = await navigator.mediaDevices.getUserMedia(getCameraConstraints());
             videoElement.srcObject = stream;
+            // Comprobar orientación cuando el stream tenga dimensiones reales,
+            // y de nuevo si el usuario rota el dispositivo durante la sesión.
+            videoElement.addEventListener('loadedmetadata', comprobarOrientacion);
+            videoElement.addEventListener('resize', comprobarOrientacion);
             if (indicador) {
                 indicador.textContent = 'Motor listo';
                 indicador.classList.add('ia-lista');
@@ -241,7 +270,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function getModoGrabacion() {
-        return selectorModoGrabacion ? selectorModoGrabacion.value : 'vertical';
+        return selectorModoGrabacion ? selectorModoGrabacion.value : 'horizontal';
     }
 
     function aplicarModoGrabacionUI() {
@@ -291,6 +320,10 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     async function iniciarGrabacion() {
+        if (enModoPortrait) {
+            mostrarToast('Gira el dispositivo a horizontal antes de grabar.', 'warn');
+            return;
+        }
         if (typeof MediaRecorder === 'undefined') {
             mostrarToast('La grabacion no esta soportada en este navegador.', 'error');
             return;
@@ -368,6 +401,13 @@ document.addEventListener('DOMContentLoaded', () => {
             // Vista local con landmarks para reproducir el video analizado en el navegador.
             if (window.futbolLandmarksPreview && typeof window.futbolLandmarksPreview.setVideoBlob === 'function') {
                 window.futbolLandmarksPreview.setVideoBlob(videoNormalizado);
+            }
+            // Pasar frames con landmarks al visor 3D.
+            if (window.futbolLandmarksPreview && typeof window.futbolLandmarksPreview.set3DFrames === 'function') {
+                window.futbolLandmarksPreview.set3DFrames(
+                    Array.isArray(resultado.landmarks_frames) ? resultado.landmarks_frames : [],
+                    resultado.frame_impacto ?? null
+                );
             }
             mostrarToast('Analisis completado', 'success');
         } catch (error) {

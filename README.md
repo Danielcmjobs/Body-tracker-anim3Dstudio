@@ -2,6 +2,8 @@
 
 Plataforma web modular para captura, procesamiento y visualización de **mediciones físicas en tiempo real**.
 
+📖 **[Manual de usuario](MANUAL_USUARIO.md)** · 📋 **[Changelog](CHANGELOG.md)**
+
 El proyecto integra múltiples fuentes de datos (Arduino, sensores móviles) bajo una misma arquitectura:
 
 ```

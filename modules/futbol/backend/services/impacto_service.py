@@ -15,7 +15,11 @@ import math
 
 
 def _vel_horizontal(frames, attr: str) -> list[float | None]:
-    """Velocidad horizontal absoluta (px/frame) del landmark indicado."""
+    """Magnitud 2D del desplazamiento (px/frame) del landmark indicado.
+
+    Se usa magnitud 2D (hypot) en lugar de sólo el eje X para detectar
+    correctamente golpeos con componente vertical dominante (volée, etc.).
+    """
     velocidades: list[float | None] = [None]
     for i in range(1, len(frames)):
         a = getattr(frames[i - 1], attr)
@@ -23,7 +27,7 @@ def _vel_horizontal(frames, attr: str) -> list[float | None]:
         if a is None or b is None:
             velocidades.append(None)
             continue
-        velocidades.append(abs(b[0] - a[0]))
+        velocidades.append(math.hypot(b[0] - a[0], b[1] - a[1]))
     return velocidades
 
 

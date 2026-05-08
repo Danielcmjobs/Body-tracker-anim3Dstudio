@@ -45,13 +45,17 @@ class FutbolController:
         if not frames or info is None:
             return _respuesta_vacia("No se detectaron landmarks en el video.")
 
-        # 1) Métricas puntuales (ángulos del frame de referencia)
-        metricas_basicas = self.calculo.calcular_metricas(frames, info)
+        # 1) Detección de pierna y frame de impacto PRIMERO — para que calcular_metricas
+        #    use el frame correcto (el del impacto) en lugar del último frame.
+        pierna_g, pierna_a, idx_impacto, _vel_pico = detectar_pierna_golpeo_apoyo(frames)
+
+        # 2) Métricas puntuales (ángulos en el frame de impacto detectado)
+        metricas_basicas = self.calculo.calcular_metricas(frames, info, idx_impacto=idx_impacto)
         if metricas_basicas.get("confianza", 0) == 0:
             return metricas_basicas
 
-        # 2) Detección de pierna y frame de impacto
-        pierna_g, pierna_a, idx_impacto, _vel_pico = detectar_pierna_golpeo_apoyo(frames)
+        # Sobreescribir pierna con el resultado cinemático (más fiable que el heurístico por ángulo).
+        # Si la detección por velocidad falló, mantener la heurística de ángulo de rodilla.
         if pierna_g != "desconocida":
             metricas_basicas["pierna_golpeo"] = pierna_g
             metricas_basicas["pierna_apoyo"] = pierna_a

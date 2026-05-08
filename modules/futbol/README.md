@@ -207,6 +207,39 @@ columna y la vista `v_golpeos` actualizadas.
 
 ---
 
+## Posición de cámara requerida
+
+> El sistema trabaja en **coordenadas 2D (x, y)**. Todos los ángulos se calculan en el plano de imagen. Una posición de cámara incorrecta produce mediciones inválidas.
+
+### Modo horizontal (paisaje) — **recomendado para golpeo**
+
+```
+         ←————— 4–6 metros —————→
+[CÁMARA] ═════════════════════ [JUGADOR] →→→ (dirección del tiro)
+         altura ideal: a nivel de cadera-rodilla (~0.8–1.0 m del suelo)
+```
+
+| Requisito | Valor |
+|-----------|-------|
+| **Plano** | Sagital: cámara perpendicular a la dirección del golpeo (90°) |
+| **Distancia** | 4–6 metros para ver el cuerpo completo en 1280×720 |
+| **Altura** | Nivel cadera–rodilla del jugador (~0.8–1.0 m del suelo) |
+| **Encuadre** | Cabeza **y** ambos pies visibles — si se cortan los pies, `angulo_tobillo` falla |
+| **Eje de movimiento** | El jugador avanza de izquierda a derecha (o derecha a izquierda) en la imagen |
+| **NO usar** | Vista frontal o diagonal — las piernas se superponen en proyección 2D y los ángulos se distorsionan |
+
+### Modo vertical (retrato) — uso limitado
+
+Sólo recomendado cuando el movimiento principal es vertical (remates de cabeza en salto). Para golpeos de balón a ras de suelo, el campo visual es demasiado estrecho y la velocidad horizontal del pie se captura mal.
+
+### Lo que el sistema NO puede medir con una sola cámara lateral
+
+- Rotación interna/externa de rodilla (requiere vista frontal)
+- Profundidad del paso previo al golpeo (requiere 3D)
+- Aducción/aducción de cadera (requiere vista frontal)
+
+---
+
 ## Score compuesto (0–100)
 
 Calculado en `services/calculo_service.py` usando pesos de `config.SCORE_PESOS_GOLPEO`:
@@ -217,17 +250,31 @@ score = Σ peso_i × normalizar(metrica_i, rango_min_i, rango_max_i) × 100
 
 Métricas y pesos por defecto:
 
-| Métrica               | Peso | Rango de normalización |
-|-----------------------|------|------------------------|
-| `velocidad_pie_ms`    | 0.40 | 2 – 18 m/s             |
-| `estabilidad_tronco`  | 0.25 | 0.3 – 1.0              |
-| `confianza`           | 0.20 | 0.5 – 1.0              |
-| `angulo_cadera_deg`   | 0.15 | 90° – 160°             |
+| Métrica               | Peso | Rango de normalización | Unidad |
+|-----------------------|------|------------------------|--------|
+| `velocidad_pie_ms`    | 0.40 | 2 – 18                 | m/s    |
+| `estabilidad_tronco`  | 0.25 | 30 – 100              | score 0–100 |
+| `confianza`           | 0.20 | 0.5 – 1.0             | ratio  |
+| `angulo_cadera_deg`   | 0.15 | 90° – 160°            | grados |
 
 ---
 
-## Notas
+## Notas técnicas
 
 - El modelo MediaPipe reutiliza `pose_landmarker_lite.task` del módulo salto.
 - El backend de salto corre en puerto 5001, el sensor en 5000.
 - Ver contrato completo de API en [`scripts/API_CONTRATOS.md`](../../scripts/API_CONTRATOS.md).
+
+### Pipeline de análisis (orden de ejecución en `futbol_controller.py`)
+
+1. `VideoProcessor.procesar()` → extrae `FramePose` por cada frame del vídeo.
+2. `detectar_pierna_golpeo_apoyo()` → detecta pierna activa e `idx_impacto` por pico de velocidad 2D.
+3. `CalculoService.calcular_metricas(frames, info, idx_impacto)` → ángulos articulares **en el frame de impacto** (no en el último frame).
+4. `calcular_velocidad_pie()` → convierte px/s a m/s usando altura estimada del jugador.
+5. `calcular_curvas_angulares()` → series angulares frame a frame.
+6. `detectar_fases()` → aproximación / armado / impacto / follow-through.
+7. `estabilidad_tronco_temporal()` + `estabilidad_pierna_apoyo()` + `asimetria_postura()`.
+8. `generar_alertas_golpeo()` → alertas accionables.
+9. `clasificar_golpeo()` + `generar_observaciones()` + `calcular_score_compuesto()`.
+
+> **Importante:** `detectar_pierna_golpeo_apoyo` se llama **antes** de `calcular_metricas` para que los ángulos se midan en el frame de impacto real, no en el follow-through.

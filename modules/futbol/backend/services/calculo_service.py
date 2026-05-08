@@ -43,7 +43,7 @@ def calcular_score_compuesto(metricas: dict) -> float | None:
 
 class CalculoService:
     # Calcula angulos y estabilidad a partir de los frames validos.
-    def calcular_metricas(self, frames: list, info) -> dict:
+    def calcular_metricas(self, frames: list, info, idx_impacto: int | None = None) -> dict:
         frames_validos = [f for f in frames if f.cadera_izq and f.cadera_der]
         if not frames_validos:
             return {
@@ -57,7 +57,12 @@ class CalculoService:
                 "pierna_apoyo": "desconocida",
             }
 
-        frame_ref = frames_validos[-1]
+        # Bug A fix: usar el frame más cercano al impacto (no el último).
+        # Si idx_impacto no está disponible aún, usar el último frame como fallback.
+        if idx_impacto is not None:
+            frame_ref = min(frames_validos, key=lambda f: abs(f.frame_idx - idx_impacto))
+        else:
+            frame_ref = frames_validos[-1]
 
         ang_rod_izq = angulo_3p(frame_ref.cadera_izq, frame_ref.rodilla_izq, frame_ref.tobillo_izq)
         ang_rod_der = angulo_3p(frame_ref.cadera_der, frame_ref.rodilla_der, frame_ref.tobillo_der)
@@ -71,7 +76,8 @@ class CalculoService:
         pierna_golpeo = "izquierda" if _menor_angulo(ang_rod_izq, ang_rod_der) == "izq" else "derecha"
         pierna_apoyo = "derecha" if pierna_golpeo == "izquierda" else "izquierda"
 
-        angulo_cadera = _promedio([ang_cad_izq, ang_cad_der])
+        # Bug D fix: angulo_cadera solo de la pierna de golpeo, no promedio de ambas.
+        angulo_cadera = ang_cad_izq if pierna_golpeo == "izquierda" else ang_cad_der
         angulo_rodilla = ang_rod_izq if pierna_golpeo == "izquierda" else ang_rod_der
         angulo_tobillo = ang_tob_izq if pierna_golpeo == "izquierda" else ang_tob_der
 

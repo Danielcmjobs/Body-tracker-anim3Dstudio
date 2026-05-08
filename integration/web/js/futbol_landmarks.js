@@ -354,6 +354,9 @@ function mostrarPreview(videoBlob) {
         return;
     }
 
+    // Si el usuario estaba en vista 3D, volvemos a 2D antes de mostrar el nuevo vídeo.
+    mostrar2D();
+
     if (previewUrl) {
         URL.revokeObjectURL(previewUrl);
     }
@@ -391,6 +394,316 @@ function resetPreview() {
     }
 }
 
+// ── Visor 3D ─────────────────────────────────────────────────────────────────
+
+// Conexiones de los 33 landmarks de MediaPipe Pose (índices estándar).
+const POSE_CONNECTIONS_33 = [
+    [0,1],[1,2],[2,3],[3,7],[0,4],[4,5],[5,6],[6,8],
+    [9,10],[11,12],[11,13],[13,15],[15,17],[15,19],[17,19],
+    [12,14],[14,16],[16,18],[16,20],[18,20],
+    [11,23],[12,24],[23,24],[23,25],[24,26],[25,27],[26,28],
+    [27,29],[28,30],[29,31],[30,32],[27,31],[28,32]
+];
+
+let threeDepsPromise3D = null;
+let three3DInst = null;
+// Estado del reproductor 3D.
+const state3D = {
+    frames: [],
+    frameImpacto: null,
+    currentIdx: 0,
+    playing: false,
+    rafId: 0,
+    animLoopId: 0,
+    speedIdx: 0,
+    speeds: [1, 0.5, 0.25],
+    speedLabels: ['×1', '×½', '×¼'],
+    lastTick: 0
+};
+
+async function _cargarThreeDeps3D() {
+    if (!threeDepsPromise3D) {
+        threeDepsPromise3D = (async () => {
+            const intentos = [
+                {
+                    threeUrl: 'https://esm.sh/three@0.160.0?bundle',
+                    controlsUrl: 'https://esm.sh/three@0.160.0/examples/jsm/controls/OrbitControls.js?deps=three@0.160.0'
+                },
+                {
+                    threeUrl: 'https://unpkg.com/three@0.160.0/build/three.module.js',
+                    controlsUrl: 'https://unpkg.com/three@0.160.0/examples/jsm/controls/OrbitControls.js?module'
+                },
+                {
+                    threeUrl: 'https://cdn.jsdelivr.net/npm/three@0.160.0/+esm',
+                    controlsUrl: 'https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/controls/OrbitControls.js/+esm'
+                }
+            ];
+            let lastErr = null;
+            for (const it of intentos) {
+                try {
+                    const [tm, cm] = await Promise.all([import(it.threeUrl), import(it.controlsUrl)]);
+                    return { THREE: tm, OrbitControls: cm.OrbitControls };
+                } catch (e) { lastErr = e; }
+            }
+            throw new Error(lastErr?.message || 'No se pudo cargar Three.js');
+        })();
+    }
+    return threeDepsPromise3D;
+}
+
+function _dispose3D() {
+    if (!three3DInst) return;
+    cancelAnimationFrame(state3D.rafId);
+    cancelAnimationFrame(state3D.animLoopId);
+    state3D.playing = false;
+    state3D.rafId = 0;
+    state3D.animLoopId = 0;
+    if (three3DInst.resizeObs) three3DInst.resizeObs.disconnect();
+    if (three3DInst.controls) three3DInst.controls.dispose();
+    if (three3DInst.renderer) {
+        three3DInst.renderer.dispose();
+        const el = three3DInst.renderer.domElement;
+        if (el && el.parentNode) el.parentNode.removeChild(el);
+    }
+    three3DInst = null;
+}
+
+async function _init3D() {
+    const container = document.getElementById('preview-view-3d');
+    if (!container) return;
+
+    _dispose3D();
+    const { THREE, OrbitControls } = await _cargarThreeDeps3D();
+
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x1a1a2e);
+    const camera = new THREE.PerspectiveCamera(45, 1, 0.01, 20);
+    camera.position.set(0, 0.1, 2.4);
+
+    let renderer;
+    try {
+        renderer = new THREE.WebGLRenderer({ antialias: true });
+    } catch (_e) {
+        container.textContent = 'WebGL no disponible en este dispositivo.';
+        return;
+    }
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+
+    const controls = new OrbitControls(camera, renderer.domElement);
+    controls.enableDamping = true;
+    controls.target.set(0, 0, 0);
+
+    scene.add(new THREE.AmbientLight(0xffffff, 0.85));
+    const key = new THREE.DirectionalLight(0xffffff, 0.8);
+    key.position.set(1.8, 2.5, 2.1);
+    scene.add(key);
+
+    const jointMat = new THREE.MeshStandardMaterial({ color: 0xff9f6e, roughness: 0.5 });
+    const joints = Array.from({ length: 33 }, () => {
+        const mesh = new THREE.Mesh(new THREE.SphereGeometry(0.025, 10, 10), jointMat.clone());
+        mesh.visible = false;
+        scene.add(mesh);
+        return mesh;
+    });
+
+    const bones = POSE_CONNECTIONS_33.map(([a, b]) => {
+        const geo = new THREE.BufferGeometry();
+        geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(6), 3));
+        const line = new THREE.Line(geo, new THREE.LineBasicMaterial({ color: 0x59ffc7 }));
+        line.visible = false;
+        scene.add(line);
+        return { a, b, line };
+    });
+
+    function resize() {
+        const w = Math.max(1, container.clientWidth);
+        const h = Math.max(1, container.clientHeight);
+        renderer.setSize(w, h, false);
+        camera.aspect = w / h;
+        camera.updateProjectionMatrix();
+    }
+
+    let resizeObs = null;
+    if (typeof ResizeObserver !== 'undefined') {
+        resizeObs = new ResizeObserver(resize);
+        resizeObs.observe(container);
+    }
+
+    container.textContent = '';
+    container.appendChild(renderer.domElement);
+    resize();
+
+    three3DInst = { scene, camera, renderer, controls, joints, bones, resizeObs, THREE };
+
+    const tick = () => {
+        controls.update();
+        renderer.render(scene, camera);
+        state3D.rafId = requestAnimationFrame(tick);
+    };
+    tick();
+}
+
+function _renderFrame3D(frame) {
+    if (!three3DInst || !frame) return;
+    const lms = Array.isArray(frame.landmarks) ? frame.landmarks : [];
+
+    const pts = lms.map((p) => {
+        if (!p || !Number.isFinite(p.x) || !Number.isFinite(p.y) || !Number.isFinite(p.z)) return null;
+        return { x: (p.x - 0.5) * 2, y: (0.5 - p.y) * 2, z: -(p.z || 0) * 2 };
+    });
+
+    three3DInst.joints.forEach((mesh, i) => {
+        const p = pts[i];
+        mesh.visible = Boolean(p);
+        if (p) mesh.position.set(p.x, p.y, p.z);
+    });
+
+    three3DInst.bones.forEach((b) => {
+        const pa = pts[b.a]; const pb = pts[b.b];
+        if (!pa || !pb) { b.line.visible = false; return; }
+        const pos = b.line.geometry.attributes.position;
+        pos.array[0] = pa.x; pos.array[1] = pa.y; pos.array[2] = pa.z;
+        pos.array[3] = pb.x; pos.array[4] = pb.y; pos.array[5] = pb.z;
+        pos.needsUpdate = true;
+        b.line.visible = true;
+    });
+}
+
+function _updateSlider() {
+    const slider = document.getElementById('slider-3d');
+    if (slider) slider.value = state3D.currentIdx;
+    // Etiqueta de frame de impacto.
+    const lbl = document.getElementById('lbl-frame-impacto');
+    if (lbl && state3D.frameImpacto != null) {
+        const cur = state3D.frames[state3D.currentIdx];
+        const dist = cur ? Math.abs((cur.frame_idx ?? state3D.currentIdx) - state3D.frameImpacto) : null;
+        lbl.textContent = dist === 0 ? '⚡ IMPACTO' : (dist != null ? `f${cur.frame_idx ?? state3D.currentIdx}` : '');
+    }
+}
+
+function _step3D(ts) {
+    if (!state3D.playing || !state3D.frames.length) return;
+    const fps = 30; // velocidad base de reproducción
+    const ms = 1000 / (fps * state3D.speeds[state3D.speedIdx]);
+    if (ts - state3D.lastTick >= ms) {
+        state3D.lastTick = ts;
+        state3D.currentIdx = (state3D.currentIdx + 1) % state3D.frames.length;
+        _renderFrame3D(state3D.frames[state3D.currentIdx]);
+        _updateSlider();
+    }
+}
+
+function _iniciarReproductor3D() {
+    // Play/pausa
+    const btnPlay = document.getElementById('btn-3d-play');
+    if (btnPlay) {
+        btnPlay.onclick = () => {
+            state3D.playing = !state3D.playing;
+            btnPlay.textContent = state3D.playing ? '⏸' : '▶';
+        };
+    }
+    // Slider scrubbing
+    const slider = document.getElementById('slider-3d');
+    if (slider) {
+        slider.max = Math.max(0, state3D.frames.length - 1);
+        slider.value = 0;
+        slider.oninput = () => {
+            state3D.currentIdx = Number(slider.value);
+            _renderFrame3D(state3D.frames[state3D.currentIdx]);
+            _updateSlider();
+        };
+    }
+    // Velocidad
+    const btnSpeed = document.getElementById('btn-3d-speed');
+    if (btnSpeed) {
+        btnSpeed.onclick = () => {
+            state3D.speedIdx = (state3D.speedIdx + 1) % state3D.speeds.length;
+            btnSpeed.textContent = state3D.speedLabels[state3D.speedIdx];
+        };
+    }
+
+    // Etiqueta impacto
+    const lbl = document.getElementById('lbl-frame-impacto');
+    if (lbl && state3D.frameImpacto != null) {
+        lbl.textContent = `Impacto: frame ${state3D.frameImpacto}`;
+    }
+
+    // Ir al frame de impacto directamente.
+    if (state3D.frameImpacto != null && state3D.frames.length) {
+        const idx = state3D.frames.findIndex(
+            (f) => (f.frame_idx ?? 0) >= state3D.frameImpacto
+        );
+        state3D.currentIdx = idx >= 0 ? idx : 0;
+        if (slider) slider.value = state3D.currentIdx;
+    }
+
+    // Loop de animación independiente del render WebGL.
+    // Cancelamos cualquier loop anterior antes de iniciar uno nuevo.
+    cancelAnimationFrame(state3D.animLoopId);
+    state3D.animLoopId = 0;
+    function animLoop(ts) {
+        _step3D(ts);
+        state3D.animLoopId = requestAnimationFrame(animLoop);
+    }
+    state3D.animLoopId = requestAnimationFrame(animLoop);
+}
+
+async function mostrar3D(frames, frameImpacto) {
+    const wrap2d = document.getElementById('preview-2d-wrap');
+    const wrap3d = document.getElementById('preview-view-3d');
+    const ctrl3d = document.getElementById('preview-3d-controls');
+    if (!wrap3d) return;
+
+    state3D.frames = frames || [];
+    state3D.frameImpacto = frameImpacto ?? null;
+    state3D.currentIdx = 0;
+    state3D.playing = false;
+    state3D.speedIdx = 0;
+
+    if (wrap2d) wrap2d.style.display = 'none';
+    wrap3d.style.display = 'block';
+    if (ctrl3d) ctrl3d.style.display = 'flex';
+
+    await _init3D();
+
+    if (state3D.frames.length) {
+        _renderFrame3D(state3D.frames[0]);
+    }
+
+    _iniciarReproductor3D();
+}
+
+function mostrar2D() {
+    const wrap2d = document.getElementById('preview-2d-wrap');
+    const wrap3d = document.getElementById('preview-view-3d');
+    const ctrl3d = document.getElementById('preview-3d-controls');
+    if (wrap2d) wrap2d.style.display = '';
+    if (wrap3d) wrap3d.style.display = 'none';
+    if (ctrl3d) ctrl3d.style.display = 'none';
+    state3D.playing = false;
+    _dispose3D();
+}
+
+function _configurarBotones3D() {
+    const btn2d = document.getElementById('btn-lm-2d');
+    const btn3d = document.getElementById('btn-lm-3d');
+    if (!btn2d || !btn3d) return;
+    btn2d.addEventListener('click', () => {
+        btn2d.classList.add('active');
+        btn3d.classList.remove('active');
+        mostrar2D();
+    });
+    btn3d.addEventListener('click', () => {
+        btn3d.classList.add('active');
+        btn2d.classList.remove('active');
+        if (state3D.frames.length) {
+            mostrar3D(state3D.frames, state3D.frameImpacto);
+        }
+    });
+}
+
+_configurarBotones3D();
+
 // API publica para futbol.js
 window.futbolLandmarksPreview = {
     setVideoBlob: (videoBlob) => {
@@ -398,7 +711,23 @@ window.futbolLandmarksPreview = {
             mostrarPreview(videoBlob);
         }
     },
-    reset: () => resetPreview()
+    set3DFrames: (frames, frameImpacto) => {
+        state3D.frames = frames || [];
+        state3D.frameImpacto = frameImpacto ?? null;
+        // Habilitar el botón 3D solo si hay datos.
+        const btn3d = document.getElementById('btn-lm-3d');
+        if (btn3d) btn3d.disabled = !state3D.frames.length;
+    },
+    reset: () => {
+        resetPreview();
+        mostrar2D();
+        state3D.frames = [];
+        state3D.frameImpacto = null;
+        const btn2d = document.getElementById('btn-lm-2d');
+        const btn3d = document.getElementById('btn-lm-3d');
+        if (btn2d) { btn2d.classList.add('active'); }
+        if (btn3d) { btn3d.classList.remove('active'); btn3d.disabled = false; }
+    }
 };
 
 // Arranca el overlay en vivo cuando el stream esta disponible.

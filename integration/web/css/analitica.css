@@ -415,8 +415,21 @@
     font-size: 0.82rem;
 }
 
-#landmarks-slider {
+#landmarks-slider,
+#slider-3d {
     width: 100%;
+}
+
+/* Controles reproductor 3D del módulo fútbol */
+#preview-3d-controls {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+}
+
+#preview-view-3d {
+    height: 300px;
 }
 
 .landmarks-switch {
