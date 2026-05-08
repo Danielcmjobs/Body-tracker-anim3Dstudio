@@ -244,46 +244,7 @@
     </section>
 
     <script src="js/config.js?v=20260507b"></script>
-    <script>
-    // FORCE: Restaurar pre-camera-controls si no existe
-    function asegurarPreCameraControls() {
-        if (document.querySelector('.pre-camera-controls')) {
-            console.log('✓ pre-camera-controls ya existe');
-            return;
-        }
-        console.warn('⚠ pre-camera-controls NO existe, inyectando...');
-        
-        const topBar = document.querySelector('.top-bar');
-        const cameraWrapper = document.querySelector('.camera-wrapper');
-        
-        if (topBar && cameraWrapper) {
-            const section = document.createElement('section');
-            section.className = 'pre-camera-controls';
-            section.innerHTML = `
-                <label for="modo-analisis" class="pre-camera-label">Modo</label>
-                <select id="modo-analisis" class="modern-input">
-                    <option value="individual" selected>Tiro individual</option>
-                    <option value="comparativa">Tiros comparativa (4 tiros)</option>
-                </select>
-                <p class="sensor-nota">En modo comparativa, el sistema agrupa 4 tiros consecutivos de la misma sesión y muestra la tabla de comparación.</p>
-            `;
-            cameraWrapper.parentNode.insertBefore(section, cameraWrapper);
-            console.log('✓ pre-camera-controls inyectado correctamente');
-        } else {
-            console.error('✗ No se pudo encontrar topBar o cameraWrapper');
-        }
-    }
-    
-    // Ejecutar al cargar el DOM
-    if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', asegurarPreCameraControls);
-    } else {
-        asegurarPreCameraControls();
-    }
-    
-    // Ejecutar también después de 1 segundo por si acaso
-    setTimeout(asegurarPreCameraControls, 1000);
-    </script>
+    <script src="js/futbol_controls.js?v=20260508b"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
     <script src="js/api-client.js?v=20260507b"></script>
     <script src="js/api_futbol.js?v=20260507b"></script>
