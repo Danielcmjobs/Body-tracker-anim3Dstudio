@@ -4,6 +4,18 @@ import {
     DrawingUtils
 } from "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.3";
 
+// === Configuracion dinamica (importada desde config_balon.js) ===
+let configDinamica = {
+    ball_detector_mode: "heuristic",
+    ball_detector_enabled: false,
+    rgb_threshold: 35,
+    motion_threshold: 12,
+    frame_diff_threshold: 20,
+    confidence_threshold: 0.5,
+    iou_threshold: 0.5,
+    search_distance: 150,
+};
+
 // === Configuracion basica del overlay ===
 const LIVE_POSE_COLOR = "#9c5cd4";
 const LIVE_POSE_DOT = "#ffffff";
@@ -42,6 +54,29 @@ function crearEstadoBalon() {
         ancho: 0,
         alto: 0
     };
+}
+
+// Estima un umbral de cambio RGB segun el ruido actual de la escena.
+function estimarThresholdAdaptativo(data, prev) {
+    if (!data || !prev || data.length !== prev.length) {
+        return 35;
+    }
+    const step = 40; // muestreo ligero para no penalizar rendimiento
+    let sum = 0;
+    let n = 0;
+    for (let i = 0; i < data.length; i += 4 * step) {
+        const dr = Math.abs(data[i] - prev[i]);
+        const dg = Math.abs(data[i + 1] - prev[i + 1]);
+        const db = Math.abs(data[i + 2] - prev[i + 2]);
+        sum += (dr + dg + db) / 3;
+        n += 1;
+    }
+    if (!n) {
+        return 35;
+    }
+    const media = sum / n;
+    // Acota para no volverse demasiado sensible ni demasiado estricto.
+    return Math.min(55, Math.max(20, Math.round(media * 2.2)));
 }
 
 // Inicializa el landmarker de MediaPipe solo una vez.
@@ -180,8 +215,9 @@ function detectarBalon(video, landmarks, estado, salidaAncho, salidaAlto) {
 
     const data = curr.data;
     const prev = estado.prev.data;
-    const threshold = 35;
-    const minPixels = 50;
+    const threshold = estimarThresholdAdaptativo(data, prev);
+    const area = targetW * targetH;
+    const minPixels = Math.max(18, Math.round(area * 0.0015));
 
     let sumX = 0;
     let sumY = 0;
@@ -224,7 +260,8 @@ function detectarBalon(video, landmarks, estado, salidaAncho, salidaAlto) {
     const pies = obtenerCentroPies(landmarks, targetW, targetH);
     if (pies) {
         const dist = Math.hypot(cx - pies.x, cy - pies.y);
-        const maxDist = Math.max(targetW, targetH) * 0.65;
+        const factorDist = estado.ultimaDeteccion ? 1.1 : 0.75;
+        const maxDist = Math.max(targetW, targetH) * factorDist;
         if (dist > maxDist) {
             return estado.ultimaDeteccion;
         }
@@ -232,13 +269,22 @@ function detectarBalon(video, landmarks, estado, salidaAncho, salidaAlto) {
 
     // Suavizado basico para evitar saltos bruscos.
     if (estado.ultimaDeteccion) {
-        const alpha = 0.6;
-        cx = (estado.ultimaDeteccion.x * (1 - alpha)) + (cx * alpha);
-        cy = (estado.ultimaDeteccion.y * (1 - alpha)) + (cy * alpha);
-        radio = (estado.ultimaDeteccion.r * (1 - alpha)) + (radio * alpha);
+        // Ojo: suavizamos siempre en coordenadas del canvas reducido (raw),
+        // nunca en coordenadas de salida para evitar mezclar escalas.
+        const dx = cx - estado.ultimaDeteccion.xRaw;
+        const dy = cy - estado.ultimaDeteccion.yRaw;
+        const velocidad = Math.hypot(dx, dy);
+        // CONFIGURACION DINAMICA: usar motion_threshold en lugar del valor hardcodeado 12
+        const alpha = velocidad > configDinamica.motion_threshold ? 0.85 : 0.6;
+        cx = (estado.ultimaDeteccion.xRaw * (1 - alpha)) + (cx * alpha);
+        cy = (estado.ultimaDeteccion.yRaw * (1 - alpha)) + (cy * alpha);
+        radio = (estado.ultimaDeteccion.rRaw * (1 - alpha)) + (radio * alpha);
     }
 
     estado.ultimaDeteccion = {
+        xRaw: cx,
+        yRaw: cy,
+        rRaw: radio,
         x: (cx / targetW) * salidaAncho,
         y: (cy / targetH) * salidaAlto,
         r: (radio / targetW) * salidaAncho
@@ -263,6 +309,25 @@ function drawBall(ctx, balon) {
     ctx.restore();
 }
 
+/**
+ * Actualiza la configuración en tiempo real desde el panel de control.
+ * Se llama desde config_balon.js cuando el usuario cambia parámetros.
+ */
+function actualizarConfiguracionEnVivo(nuevaConfig) {
+    // Actualizar estado global
+    configDinamica = { ...configDinamica, ...nuevaConfig };
+    
+    // Resetear estado de detección para que se recalcule con nuevos parámetros
+    ballStateLive.prev = null;
+    ballStateLive.ultimaDeteccion = null;
+    ballStatePreview.prev = null;
+    ballStatePreview.ultimaDeteccion = null;
+    
+    console.log("[futbol_landmarks] Configuración actualizada en vivo:", configDinamica);
+}
+
+// Registrar en window para que config_balon.js pueda accederla
+window.actualizarConfiguracionEnVivo = actualizarConfiguracionEnVivo;
 // Loop de render en vivo (camara).
 async function renderLiveLoop() {
     if (!liveLoopActivo || !videoLive || !ctxLive) {

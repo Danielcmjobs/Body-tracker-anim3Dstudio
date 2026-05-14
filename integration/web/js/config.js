@@ -35,3 +35,13 @@ function getSensorBaseUrl() {
 function getFutbolBaseUrl() {
     return `${getCurrentProtocol()}://${getCurrentHost()}:${BACKEND_FUTBOL_PORT}`;
 }
+
+// Configuracion funcional del frontend.
+// `usarMLBalon` activa el refinado offline en backend (si hay modelo configurado).
+window.APP_CONFIG = window.APP_CONFIG || {};
+window.APP_CONFIG.futbol = Object.assign(
+    {
+        usarMLBalon: false
+    },
+    window.APP_CONFIG.futbol || {}
+);

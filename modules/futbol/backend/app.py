@@ -41,6 +41,13 @@ from services.analitica_service import (
     calcular_tendencia,
     calcular_comparativa,
 )
+from services.settings_service import (
+    obtener_todos,
+    obtener_setting,
+    actualizar_setting,
+    actualizar_varios,
+    guardar_settings,
+)
 from utils.serializers import serializar_row as _serializar
 
 app = Flask(__name__)
@@ -87,9 +94,16 @@ def analizar_golpeo():
     incluir_landmarks = (request.form.get("incluir_landmarks", "false").strip().lower() in {
         "1", "true", "si", "yes"
     })
+    usar_ml_balon = (request.form.get("usar_ml_balon", "false").strip().lower() in {
+        "1", "true", "si", "yes"
+    })
 
     try:
-        resultado = controller.procesar_golpeo(ruta_video, incluir_landmarks=incluir_landmarks)
+        resultado = controller.procesar_golpeo(
+            ruta_video,
+            incluir_landmarks=incluir_landmarks,
+            usar_ml_balon=usar_ml_balon,
+        )
     except Exception as e:
         app.logger.error(f"Error al procesar el video: {e}", exc_info=True)
         return jsonify({"error": "Ocurrió un error interno al procesar el video."}), 500
@@ -297,13 +311,62 @@ def _golpeos_serializados(id_usuario: int, orden: str = "DESC") -> list[dict]:
     return [_serializar(g) for g in golpeos]
 
 
+# ─────────────────────────────────────────────────────────────
+# ENDPOINTS DE CONFIGURACION EN TIEMPO REAL
+# ─────────────────────────────────────────────────────────────
+
+@app.route("/api/futbol/config", methods=["GET"])
+def obtener_config():
+    """Retorna la configuración actual de detección de balón."""
+    return jsonify({
+        "status": "success",
+        "settings": obtener_todos()
+    })
+
+
+@app.route("/api/futbol/config", methods=["POST", "PUT"])
+def actualizar_config():
+    """Actualiza parámetros de detección en tiempo real.
+    
+    Acepta JSON como:
+    {
+        "ball_detector_mode": "heuristic",
+        "rgb_threshold": 35,
+        "confidence_threshold": 0.5
+    }
+    """
+    try:
+        datos = request.get_json() or {}
+        
+        # Actualizar configuración
+        count = actualizar_varios(datos)
+        
+        # Guardar en disco (opcional - para persistencia)
+        guardar_settings()
+        
+        return jsonify({
+            "status": "success",
+            "updated": count,
+            "settings": obtener_todos()
+        }), 200
+    except Exception as e:
+        return jsonify({
+            "status": "error",
+            "message": str(e)
+        }), 400
+
+
 if __name__ == "__main__":
     project_root = os.path.normpath(os.path.join(os.path.dirname(__file__), "..", "..", ".."))
     cert_file = os.path.join(project_root, "certs", "cert.pem")
     key_file = os.path.join(project_root, "certs", "key.pem")
     ssl_context = None
+    force_http = os.getenv("FUTBOL_FORCE_HTTP", "0").strip().lower() in ("1", "true", "yes", "on")
 
-    if os.path.exists(cert_file) and os.path.exists(key_file):
+    if force_http:
+        print("[INFO] FUTBOL_FORCE_HTTP activo. Arrancando API de futbol en HTTP.")
+        print(f"[INFO] API disponible en http://localhost:{FLASK_PORT}/api/futbol/analizar")
+    elif os.path.exists(cert_file) and os.path.exists(key_file):
         ssl_context = (cert_file, key_file)
         print(f"[INFO] API disponible en https://localhost:{FLASK_PORT}/api/futbol/analizar")
     else:
