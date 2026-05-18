@@ -39,6 +39,35 @@ let previewLoopActivo = false;
 let lastLiveTime = -1;
 let lastPreviewTime = -1;
 let previewUrl = null;
+// Timestamp monotónico para MediaPipe detectForVideo (debe ser estrictamente creciente).
+let lastPoseTs = 0;
+// Para notificar fallo del motor al indicador de UI una sola vez.
+let errorNotificado = false;
+
+function notificarErrorMotor(mensaje) {
+    if (errorNotificado) return;
+    errorNotificado = true;
+    const ind = document.getElementById('indicador-ia');
+    if (ind) {
+        ind.textContent = mensaje || 'Motor IA no disponible';
+        ind.classList.remove('ia-lista');
+        ind.classList.add('ia-error');
+    }
+    console.warn('[futbol_landmarks]', mensaje);
+}
+
+// Llama a detectForVideo con timestamp monotónico y try/catch para no matar el loop.
+function detectarPoseSeguro(landmarker, video) {
+    let ts = performance.now();
+    if (ts <= lastPoseTs) ts = lastPoseTs + 1;
+    lastPoseTs = ts;
+    try {
+        return landmarker.detectForVideo(video, ts);
+    } catch (err) {
+        console.warn('[futbol_landmarks] detectForVideo falló:', err);
+        return null;
+    }
+}
 
 
 // Estado de la heurística del balón (por flujo) y semilla manual
@@ -89,7 +118,14 @@ function crearEstadoBalon() {
         ultimaDeteccion: null,
         manualSeed: null,
         ancho: 0,
-        alto: 0
+        alto: 0,
+        // Predictor: última velocidad observada en coords raw (px/frame del canvas reducido)
+        vx: 0,
+        vy: 0,
+        framesSinDeteccion: 0,
+        // Frame-budget adaptativo (ms): si una detección tarda demasiado, saltamos el siguiente.
+        lastBallMs: 0,
+        saltarSiguiente: false
     };
 }
 
@@ -140,6 +176,7 @@ async function initPoseLandmarker() {
         });
     } catch (error) {
         landmarkerError = error;
+        notificarErrorMotor('Motor IA no disponible (revisa conexión)');
         console.warn("No se pudo iniciar PoseLandmarker en futbol.", error);
         return null;
     }
@@ -202,19 +239,72 @@ function obtenerCentroPies(landmarks, ancho, alto) {
     };
 }
 
-// DESACTIVADO: Detección por apariencia era muy costosa (clustering O(n²))
-// Usar solo motion-based detection para mejor rendimiento en móvil.
-// Si necesitas detección de pelota quieta, usar análisis offline post-grabación.
+// Marca el tiempo gastado y decide si conviene saltar el siguiente frame.
+function marcarTiempoBalon(estado, tInicio) {
+    if (!tInicio || typeof performance === 'undefined' || !performance.now) {
+        return;
+    }
+    const ms = performance.now() - tInicio;
+    // EMA del coste medio.
+    estado.lastBallMs = estado.lastBallMs * 0.7 + ms * 0.3;
+    // Si el promedio supera ~14ms (presupuesto a 60fps con pose en paralelo), saltar 1 frame.
+    estado.saltarSiguiente = estado.lastBallMs > 14;
+}
 
-// Heuristica simple de deteccion de balon basada en diferencia de frames (movimiento).
-// - Usa un canvas reducido para rapidez.
-// - Busca la nube de pixeles con mayor movimiento.
-// - Ajusta la posicion con suavizado temporal.
-// - HÍBRIDO: Si motion no detecta, intenta appearance-based (color + forma).
+// Predictor lineal: extrapola la posición usando la velocidad reciente.
+// No actualiza ultimaDeteccion (evita derivar). Solo devuelve una posición visual.
+function predecirBalon(estado) {
+    if (!estado || !estado.ultimaDeteccion) {
+        return null;
+    }
+    const u = estado.ultimaDeteccion;
+    if (estado.framesSinDeteccion > 10 || (estado.vx === 0 && estado.vy === 0)) {
+        return u;
+    }
+    // Decaimiento de la velocidad cuanto más tiempo sin detección.
+    const decay = Math.max(0, 1 - estado.framesSinDeteccion * 0.12);
+    const dxRaw = estado.vx * decay;
+    const dyRaw = estado.vy * decay;
+    // Reproyectar al espacio de salida usando la relación raw->salida de la última detección.
+    const escalaX = u.x / Math.max(0.0001, u.xRaw);
+    const escalaY = u.y / Math.max(0.0001, u.yRaw);
+    return {
+        xRaw: u.xRaw + dxRaw,
+        yRaw: u.yRaw + dyRaw,
+        rRaw: u.rRaw,
+        x: u.x + dxRaw * escalaX,
+        y: u.y + dyRaw * escalaY,
+        r: u.r
+    };
+}
+
+// Heuristica de deteccion de balon con:
+//  - ROI ajustado al estado previo (tracking ligero, más preciso)
+//  - Centroide ponderado por intensidad de movimiento (subpíxel)
+//  - Predictor lineal entre detecciones (fluidez sin coste extra)
+//  - Frame-budget adaptativo (salta un frame si el anterior tardó mucho)
 function detectarBalon(video, landmarks, estado, salidaAncho, salidaAlto, manualSeed) {
     if (!video || !estado) {
         return null;
     }
+
+    // H1: respetar flag enabled y modo del detector.
+    // Modos 'none' o 'yolo_onnx' → no dibujar overlay en vivo (yolo_onnx se ejecuta offline en backend).
+    if (configDinamica.ball_detector_enabled === false) {
+        return null;
+    }
+    const modo = configDinamica.ball_detector_mode;
+    if (modo && modo !== 'heuristic') {
+        return null;
+    }
+
+    // Frame-budget: si el frame anterior fue lento (>14ms), saltamos uno y usamos predictor.
+    if (estado.saltarSiguiente) {
+        estado.saltarSiguiente = false;
+        return predecirBalon(estado);
+    }
+
+    const tInicio = (typeof performance !== 'undefined' && performance.now) ? performance.now() : 0;
 
     const scaleBase = 160;
     const videoW = video.videoWidth || 0;
@@ -284,12 +374,15 @@ function detectarBalon(video, landmarks, estado, salidaAncho, salidaAlto, manual
     const prev = estado.prev.data;
     const thresholdAdaptativo = estimarThresholdAdaptativo(data, prev);
     const thresholdBase = Number.isFinite(configDinamica.rgb_threshold) ? configDinamica.rgb_threshold : 35;
-    const threshold = Math.max(12, Math.round((thresholdAdaptativo + thresholdBase) * 0.5));
+    // H2: frame_diff_threshold actúa como cota inferior dura (filtro de ruido temporal mínimo).
+    const fdt = Number.isFinite(configDinamica.frame_diff_threshold) ? configDinamica.frame_diff_threshold : 20;
+    const threshold = Math.max(fdt, Math.round((thresholdAdaptativo + thresholdBase) * 0.5));
     const area = targetW * targetH;
     const minPixels = Math.max(10, Math.round(area * 0.0009));
 
     let sumX = 0;
     let sumY = 0;
+    let sumW = 0;
     let count = 0;
     let minX = targetW;
     let minY = targetH;
@@ -297,12 +390,30 @@ function detectarBalon(video, landmarks, estado, salidaAncho, salidaAlto, manual
     let maxY = 0;
 
     const pies = obtenerCentroPies(landmarks, targetW, targetH);
-    const centroBusqueda = (estado.manualSeed && estado.manualSeed.ttl > 0)
-        ? { x: estado.manualSeed.xRaw, y: estado.manualSeed.yRaw }
-        : pies;
-    const distBusqueda = Number.isFinite(configDinamica.search_distance)
-        ? Math.max(30, Math.round(configDinamica.search_distance * (targetW / Math.max(1, salidaAncho))))
-        : Math.round(Math.min(targetW, targetH) * 0.45);
+
+    // PRIORIDAD DE ROI (tracking de mayor a menor coste):
+    //  1. Si hay detección reciente: ventana ajustada (2.5x radio anterior). MUY rápido y preciso.
+    //  2. Si hay semilla manual viva: ventana centrada en la semilla.
+    //  3. Si hay landmarks de pies: ventana cerca de los pies.
+    //  4. Sin pista: ROI ancho de búsqueda.
+    let centroBusqueda = null;
+    let distBusqueda;
+    if (estado.ultimaDeteccion && estado.framesSinDeteccion < 6) {
+        centroBusqueda = { x: estado.ultimaDeteccion.xRaw, y: estado.ultimaDeteccion.yRaw };
+        // Ventana ajustada: 2.5x radio + componente de velocidad para no perder el balón rápido.
+        const velMag = Math.hypot(estado.vx, estado.vy);
+        distBusqueda = Math.max(20, Math.round(estado.ultimaDeteccion.rRaw * 2.5 + velMag * 1.5));
+    } else if (estado.manualSeed && estado.manualSeed.ttl > 0) {
+        centroBusqueda = { x: estado.manualSeed.xRaw, y: estado.manualSeed.yRaw };
+        distBusqueda = Math.max(30, Math.round(targetW * 0.18));
+    } else if (pies) {
+        centroBusqueda = pies;
+        distBusqueda = Number.isFinite(configDinamica.search_distance)
+            ? Math.max(30, Math.round(configDinamica.search_distance * (targetW / Math.max(1, salidaAncho))))
+            : Math.round(Math.min(targetW, targetH) * 0.45);
+    } else {
+        distBusqueda = Math.round(Math.min(targetW, targetH) * 0.45);
+    }
 
     const roi = centroBusqueda ? {
         minX: Math.max(0, Math.floor(centroBusqueda.x - distBusqueda)),
@@ -316,18 +427,25 @@ function detectarBalon(video, landmarks, estado, salidaAncho, salidaAlto, manual
         maxY: targetH - 1,
     };
 
+    // Centroide ponderado por intensidad de movimiento (subpíxel, sin coste extra).
     for (let y = roi.minY; y <= roi.maxY; y += 1) {
+        const rowBase = y * targetW;
         for (let x = roi.minX; x <= roi.maxX; x += 1) {
-            const idx = (y * targetW + x) * 4;
-            const dr = Math.abs(data[idx] - prev[idx]);
-            const dg = Math.abs(data[idx + 1] - prev[idx + 1]);
-            const db = Math.abs(data[idx + 2] - prev[idx + 2]);
-            const diff = (dr + dg + db) / 3;
+            const idx = (rowBase + x) * 4;
+            const dr = data[idx] - prev[idx];
+            const dg = data[idx + 1] - prev[idx + 1];
+            const db = data[idx + 2] - prev[idx + 2];
+            const ar = dr < 0 ? -dr : dr;
+            const ag = dg < 0 ? -dg : dg;
+            const ab = db < 0 ? -db : db;
+            const diff = (ar + ag + ab) / 3;
             if (diff <= threshold) {
                 continue;
             }
-            sumX += x;
-            sumY += y;
+            const w = diff;
+            sumX += x * w;
+            sumY += y * w;
+            sumW += w;
             count += 1;
             if (x < minX) minX = x;
             if (y < minY) minY = y;
@@ -338,12 +456,14 @@ function detectarBalon(video, landmarks, estado, salidaAncho, salidaAlto, manual
 
     estado.prev = curr;
 
-    // Solo detectar por movimiento (rápido, optimizado para móvil)
+    // Sin movimiento suficiente: usar predictor si hay velocidad reciente, o última detección.
     if (count < minPixels) {
         if (estado.manualSeed && estado.manualSeed.ttl > 0) {
             estado.manualSeed.ttl -= 1;
         }
-        return estado.ultimaDeteccion;
+        estado.framesSinDeteccion += 1;
+        marcarTiempoBalon(estado, tInicio);
+        return predecirBalon(estado);
     }
 
     const roiArea = Math.max(1, (roi.maxX - roi.minX + 1) * (roi.maxY - roi.minY + 1));
@@ -352,37 +472,47 @@ function detectarBalon(video, landmarks, estado, salidaAncho, salidaAlto, manual
         if (estado.manualSeed && estado.manualSeed.ttl > 0) {
             estado.manualSeed.ttl -= 1;
         }
-        return estado.ultimaDeteccion;
+        estado.framesSinDeteccion += 1;
+        marcarTiempoBalon(estado, tInicio);
+        return predecirBalon(estado);
     }
 
-    let cx = sumX / count;
-    let cy = sumY / count;
+    // Centroide ponderado (subpíxel).
+    let cx = sumX / sumW;
+    let cy = sumY / sumW;
     let radio = Math.max(6, Math.sqrt(count / Math.PI));
 
     if (pies) {
         const dist = Math.hypot(cx - pies.x, cy - pies.y);
-        const factorDist = estado.ultimaDeteccion ? 1.2 : 0.9;
-        const maxDist = Math.max(25, distBusqueda * factorDist);
+        const factorDist = estado.ultimaDeteccion ? 1.5 : 0.9;
+        const maxDist = Math.max(25, (centroBusqueda === pies ? distBusqueda : targetW * 0.35) * factorDist);
         if (dist > maxDist) {
             if (estado.manualSeed && estado.manualSeed.ttl > 0) {
                 estado.manualSeed.ttl -= 1;
             }
-            return estado.ultimaDeteccion;
+            estado.framesSinDeteccion += 1;
+            marcarTiempoBalon(estado, tInicio);
+            return predecirBalon(estado);
         }
     }
 
-    // Suavizado basico para evitar saltos bruscos.
+    // Actualizar velocidad antes del suavizado (para el predictor).
     if (estado.ultimaDeteccion) {
-        // Ojo: suavizamos siempre en coordenadas del canvas reducido (raw),
-        // nunca en coordenadas de salida para evitar mezclar escalas.
-        const dx = cx - estado.ultimaDeteccion.xRaw;
-        const dy = cy - estado.ultimaDeteccion.yRaw;
-        const velocidad = Math.hypot(dx, dy);
-        // CONFIGURACION DINAMICA: usar motion_threshold en lugar del valor hardcodeado 12
-        const alpha = velocidad > configDinamica.motion_threshold ? 0.85 : 0.6;
+        const dxRaw = cx - estado.ultimaDeteccion.xRaw;
+        const dyRaw = cy - estado.ultimaDeteccion.yRaw;
+        // EMA de la velocidad para suavizar ruido.
+        estado.vx = estado.vx * 0.6 + dxRaw * 0.4;
+        estado.vy = estado.vy * 0.6 + dyRaw * 0.4;
+
+        const velocidad = Math.hypot(dxRaw, dyRaw);
+        // Suavizado adaptativo: más confianza en la nueva medición si hay velocidad real.
+        const alpha = velocidad > configDinamica.motion_threshold ? 0.85 : 0.55;
         cx = (estado.ultimaDeteccion.xRaw * (1 - alpha)) + (cx * alpha);
         cy = (estado.ultimaDeteccion.yRaw * (1 - alpha)) + (cy * alpha);
         radio = (estado.ultimaDeteccion.rRaw * (1 - alpha)) + (radio * alpha);
+    } else {
+        estado.vx = 0;
+        estado.vy = 0;
     }
 
     estado.ultimaDeteccion = {
@@ -393,10 +523,13 @@ function detectarBalon(video, landmarks, estado, salidaAncho, salidaAlto, manual
         y: (cy / targetH) * salidaAlto,
         r: (radio / targetW) * salidaAncho
     };
+    estado.framesSinDeteccion = 0;
 
     if (estado.manualSeed && estado.manualSeed.ttl > 0) {
         estado.manualSeed.ttl -= 1;
     }
+
+    marcarTiempoBalon(estado, tInicio);
 
     return estado.ultimaDeteccion;
 }
@@ -429,15 +562,37 @@ function actualizarConfiguracionEnVivo(nuevaConfig) {
     ballStateLive.prev = null;
     ballStateLive.ultimaDeteccion = null;
     ballStateLive.manualSeed = null;
+    ballStateLive.vx = 0;
+    ballStateLive.vy = 0;
+    ballStateLive.framesSinDeteccion = 0;
+    ballStateLive.lastBallMs = 0;
+    ballStateLive.saltarSiguiente = false;
     ballStatePreview.prev = null;
     ballStatePreview.ultimaDeteccion = null;
     ballStatePreview.manualSeed = null;
+    ballStatePreview.vx = 0;
+    ballStatePreview.vy = 0;
+    ballStatePreview.framesSinDeteccion = 0;
+    ballStatePreview.lastBallMs = 0;
+    ballStatePreview.saltarSiguiente = false;
     
     console.log("[futbol_landmarks] Configuración actualizada en vivo:", configDinamica);
 }
 
 // Registrar en window para que config_balon.js pueda accederla
 window.actualizarConfiguracionEnVivo = actualizarConfiguracionEnVivo;
+// Helper para agendar el siguiente frame: usa requestVideoFrameCallback (un disparo por frame de vídeo)
+// si está disponible; si no, cae a requestAnimationFrame.
+function scheduleVideoFrame(video, cb) {
+    if (video && typeof video.requestVideoFrameCallback === 'function') {
+        try {
+            video.requestVideoFrameCallback(() => cb());
+            return;
+        } catch (_) { /* fallback */ }
+    }
+    requestAnimationFrame(cb);
+}
+
 // Loop de render en vivo (camara).
 async function renderLiveLoop() {
     if (!liveLoopActivo || !videoLive || !ctxLive) {
@@ -445,7 +600,7 @@ async function renderLiveLoop() {
     }
 
     if (!syncCanvasToVideo(canvasLive, videoLive)) {
-        requestAnimationFrame(renderLiveLoop);
+        scheduleVideoFrame(videoLive, renderLiveLoop);
         return;
     }
 
@@ -453,10 +608,14 @@ async function renderLiveLoop() {
         lastLiveTime = videoLive.currentTime;
         const landmarker = await initPoseLandmarker();
         if (!landmarker) {
-            requestAnimationFrame(renderLiveLoop);
+            scheduleVideoFrame(videoLive, renderLiveLoop);
             return;
         }
-        const results = landmarker.detectForVideo(videoLive, performance.now());
+        const results = detectarPoseSeguro(landmarker, videoLive);
+        if (!results) {
+            scheduleVideoFrame(videoLive, renderLiveLoop);
+            return;
+        }
 
         ctxLive.clearRect(0, 0, canvasLive.width, canvasLive.height);
         const pose = results.landmarks && results.landmarks[0];
@@ -477,7 +636,7 @@ async function renderLiveLoop() {
         }
     }
 
-    requestAnimationFrame(renderLiveLoop);
+    scheduleVideoFrame(videoLive, renderLiveLoop);
 }
 
 // Loop de render para la previsualizacion de video analizado.
@@ -487,7 +646,7 @@ async function renderPreviewLoop() {
     }
 
     if (!syncCanvasToVideo(previewCanvas, previewVideo)) {
-        requestAnimationFrame(renderPreviewLoop);
+        scheduleVideoFrame(previewVideo, renderPreviewLoop);
         return;
     }
 
@@ -495,10 +654,14 @@ async function renderPreviewLoop() {
         lastPreviewTime = previewVideo.currentTime;
         const landmarker = await initPoseLandmarker();
         if (!landmarker) {
-            requestAnimationFrame(renderPreviewLoop);
+            scheduleVideoFrame(previewVideo, renderPreviewLoop);
             return;
         }
-        const results = landmarker.detectForVideo(previewVideo, performance.now());
+        const results = detectarPoseSeguro(landmarker, previewVideo);
+        if (!results) {
+            scheduleVideoFrame(previewVideo, renderPreviewLoop);
+            return;
+        }
 
         previewCtx.clearRect(0, 0, previewCanvas.width, previewCanvas.height);
         const pose = results.landmarks && results.landmarks[0];
@@ -519,7 +682,7 @@ async function renderPreviewLoop() {
         }
     }
 
-    requestAnimationFrame(renderPreviewLoop);
+    scheduleVideoFrame(previewVideo, renderPreviewLoop);
 }
 
 function iniciarLiveOverlay() {
@@ -562,9 +725,17 @@ function mostrarPreview(videoBlob) {
 function resetPreview() {
     previewLoopActivo = false;
     lastPreviewTime = -1;
+    // H3: reset completo del estado del balon en preview.
     ballStatePreview.prev = null;
     ballStatePreview.ultimaDeteccion = null;
     ballStatePreview.frameCount = 0;
+    ballStatePreview.manualSeed = null;
+    ballStatePreview.vx = 0;
+    ballStatePreview.vy = 0;
+    ballStatePreview.framesSinDeteccion = 0;
+    ballStatePreview.lastBallMs = 0;
+    ballStatePreview.saltarSiguiente = false;
+    manualBallSeedPreview = null;
 
     if (previewVideo) {
         try { previewVideo.pause(); } catch (_e) { /* ignore */ }
