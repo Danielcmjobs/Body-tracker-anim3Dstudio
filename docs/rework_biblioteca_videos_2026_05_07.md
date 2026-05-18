@@ -1,5 +1,13 @@
 # Rework de la Biblioteca / Galería de Vídeos - 2026-05-07
 
+> Documento histórico de rework funcional.
+> Para uso actual, consultar `docs/README.md` y `docs/manual_usuario.md`.
+
+## Resumen Ejecutivo
+- Documenta el rediseño de la biblioteca unificada de vídeos.
+- Útil como contexto de decisiones de UX, estructura y navegación.
+- Debe leerse como bitácora de cambio, no como especificación operativa única.
+
 ## Objetivo
 
 Rediseñar por completo la biblioteca de vídeos del frontend para que:

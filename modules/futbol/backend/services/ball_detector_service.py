@@ -21,6 +21,7 @@ from config import (
     BALL_DETECTOR_MODEL_PATH,
     BALL_DETECTOR_MODE,
 )
+from services.settings_service import obtener_setting
 
 
 @dataclass
@@ -40,20 +41,36 @@ class BallDetectorService:
     COCO_SOCCER_BALL_CLASS_ID = 32
 
     def __init__(self) -> None:
-        self.mode = (BALL_DETECTOR_MODE or "none").strip().lower()
         self.model_path = BALL_DETECTOR_MODEL_PATH
         self._net = None
 
+    def _modo_actual(self) -> str:
+        modo = obtener_setting("ball_detector_mode") or BALL_DETECTOR_MODE or "none"
+        return str(modo).strip().lower()
+
+    def _conf_threshold(self) -> float:
+        try:
+            return float(obtener_setting("confidence_threshold") or BALL_DETECTOR_CONF_THRESHOLD)
+        except (TypeError, ValueError):
+            return float(BALL_DETECTOR_CONF_THRESHOLD)
+
+    def _iou_threshold(self) -> float:
+        try:
+            return float(obtener_setting("iou_threshold") or BALL_DETECTOR_IOU_THRESHOLD)
+        except (TypeError, ValueError):
+            return float(BALL_DETECTOR_IOU_THRESHOLD)
+
     def enabled(self) -> bool:
-        if self.mode != "yolo_onnx":
+        if self._modo_actual() != "yolo_onnx":
             return False
         return bool(self.model_path and os.path.exists(self.model_path))
 
     def detectar_trayectoria(self, ruta_video: str) -> dict:
+        modo = self._modo_actual()
         if not self.enabled():
             return {
                 "enabled": False,
-                "mode": self.mode,
+                "mode": modo,
                 "status": "disabled",
                 "reason": "Modelo no configurado o modo desactivado",
                 "trayectoria": [],
@@ -65,7 +82,7 @@ class BallDetectorService:
             except Exception as exc:
                 return {
                     "enabled": False,
-                    "mode": self.mode,
+                    "mode": modo,
                     "status": "error",
                     "reason": f"No se pudo cargar modelo ONNX: {exc}",
                     "trayectoria": [],
@@ -75,7 +92,7 @@ class BallDetectorService:
         if not cap.isOpened():
             return {
                 "enabled": True,
-                "mode": self.mode,
+                "mode": modo,
                 "status": "error",
                 "reason": "No se pudo abrir video para postproceso ML",
                 "trayectoria": [],
@@ -88,6 +105,8 @@ class BallDetectorService:
 
         detecciones: list[BallDetection] = []
         frame_idx = 0
+        conf_th = self._conf_threshold()
+        iou_th = self._iou_threshold()
 
         try:
             while True:
@@ -97,7 +116,7 @@ class BallDetectorService:
                 if frame_idx >= BALL_DETECTOR_MAX_FRAMES:
                     break
 
-                det = self._detectar_en_frame(frame, frame_idx, fps, width, height)
+                det = self._detectar_en_frame(frame, frame_idx, fps, width, height, conf_th, iou_th)
                 if det is not None:
                     detecciones.append(det)
                 frame_idx += 1
@@ -119,7 +138,7 @@ class BallDetectorService:
 
         return {
             "enabled": True,
-            "mode": self.mode,
+            "mode": modo,
             "status": "ok",
             "frames_procesados": frame_idx,
             "detecciones": len(trayectoria),
@@ -133,6 +152,8 @@ class BallDetectorService:
         fps: float,
         width: int,
         height: int,
+        conf_th: float,
+        iou_th: float,
     ) -> BallDetection | None:
         in_size = BALL_DETECTOR_INPUT_SIZE
         blob = cv2.dnn.blobFromImage(
@@ -145,15 +166,15 @@ class BallDetectorService:
         self._net.setInput(blob)
         out = self._net.forward()
 
-        boxes, scores = self._parse_yolo_output(out, width, height)
+        boxes, scores = self._parse_yolo_output(out, width, height, conf_th)
         if not boxes:
             return None
 
         idxs = cv2.dnn.NMSBoxes(
             bboxes=boxes,
             scores=scores,
-            score_threshold=BALL_DETECTOR_CONF_THRESHOLD,
-            nms_threshold=BALL_DETECTOR_IOU_THRESHOLD,
+            score_threshold=conf_th,
+            nms_threshold=iou_th,
         )
         if idxs is None or len(idxs) == 0:
             return None
@@ -174,7 +195,7 @@ class BallDetectorService:
             conf=conf,
         )
 
-    def _parse_yolo_output(self, out: np.ndarray, width: int, height: int) -> tuple[list[list[int]], list[float]]:
+    def _parse_yolo_output(self, out: np.ndarray, width: int, height: int, conf_th: float) -> tuple[list[list[int]], list[float]]:
         """
         Intenta parsear formatos comunes de salida YOLO ONNX:
         - [1, N, 85]
@@ -191,13 +212,13 @@ class BallDetectorService:
         if arr.ndim == 3 and arr.shape[0] == 1 and arr.shape[2] >= 6:
             rows = arr[0]
             if rows.shape[1] >= 6:
-                self._extract_from_rows(rows, width, height, boxes, scores)
+                self._extract_from_rows(rows, width, height, boxes, scores, conf_th)
 
         # Caso [1, 84, N] (transpuesto)
         if not boxes and arr.ndim == 3 and arr.shape[0] == 1 and arr.shape[1] >= 6:
             rows = arr[0].T
             if rows.shape[1] >= 6:
-                self._extract_from_rows(rows, width, height, boxes, scores)
+                self._extract_from_rows(rows, width, height, boxes, scores, conf_th)
 
         return boxes, scores
 
@@ -208,6 +229,7 @@ class BallDetectorService:
         height: int,
         boxes: list[list[int]],
         scores: list[float],
+        conf_th: float,
     ) -> None:
         in_size = float(BALL_DETECTOR_INPUT_SIZE)
         sx = width / in_size if in_size > 0 else 1.0
@@ -232,7 +254,7 @@ class BallDetectorService:
                 cls_score = float(np.max(class_probs))
 
             conf = float(obj_conf * cls_score)
-            if conf < BALL_DETECTOR_CONF_THRESHOLD:
+            if conf < conf_th:
                 continue
 
             x = int((cx - (w / 2.0)) * sx)

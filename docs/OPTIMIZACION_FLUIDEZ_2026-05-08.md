@@ -1,5 +1,13 @@
 # Optimización de Fluidez - 2026-05-08
 
+> Documento histórico de optimización.
+> Para operación vigente y flujo principal, consultar `docs/README.md` y `docs/manual_usuario.md`.
+
+## Resumen Ejecutivo
+- Resume optimizaciones de rendimiento aplicadas en frontend y consumo de datos.
+- Útil como registro de decisiones y técnicas usadas para mejorar fluidez.
+- Puede no reflejar completamente el estado actual tras refactors posteriores.
+
 ## Resumen Ejecutivo
 Se han implementado 4 optimizaciones clave para mejorar significativamente la fluidez y responsividad del proyecto:
 

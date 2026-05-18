@@ -1,5 +1,14 @@
 # Análisis Técnico: Detección de Balón en Módulo Fútbol
 
+> Documento histórico de análisis técnico.
+> La implementación de detección en vivo pudo cambiar después de este análisis por razones de rendimiento.
+> Para estado vigente, consultar `DOCUMENTACION_CONFIG_REALTIME_BALON.md`.
+
+## Resumen Ejecutivo
+- Describe el enfoque heurístico de detección de balón analizado en ese momento.
+- Útil para entender limitaciones de diseño y decisiones posteriores de optimización.
+- No debe asumirse como descripción exacta del comportamiento actual sin verificar el código vigente.
+
 ## 1. Cómo funciona actualmente
 
 ### 1.1 Algoritmo general

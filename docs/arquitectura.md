@@ -73,11 +73,10 @@ scripts/             ← run_all.bat para arrancar todo
 El frontend unificado en `integration/web/` consume todos los backends.
 Cada módulo expone solo su API REST; no tiene frontend propio.
 
-## Protocolos en desarrollo (HTTP/HTTPS)
+## Protocolos en desarrollo
 
-- **Modo recomendado:** HTTPS (`https://localhost:8443`) con `scripts/run_all.bat`.
-- **Modo compatibilidad:** HTTP (`http://localhost:8080`) con servidor estático manual.
-- Los backends pueden arrancar en HTTP o HTTPS según disponibilidad de certificados en `certs/`.
+- **Modo único:** HTTPS (`https://localhost:8443`) con `scripts/run_all.bat`.
+- El frontend y los backends se operan en HTTPS para evitar mixed-content y bloqueos de cámara.
 
 ### Detalle — backend módulo salto
 

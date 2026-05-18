@@ -1,17 +1,42 @@
-# Documentación del proyecto
+# Documentación del Proyecto
 
-| Documento | Contenido |
-|-----------|-----------|
-| [arquitectura.md](arquitectura.md) | Diagrama de capas, tecnologías, BD y principios aplicados |
-| [flujo_datos.md](flujo_datos.md) | Paso a paso del dato desde el dispositivo físico hasta el navegador y la BD |
-| [fases_proyecto.md](fases_proyecto.md) | Estado de cada fase del proyecto |
-| [decisiones_tecnicas.md](decisiones_tecnicas.md) | Justificaciones de diseño (hilos, locks, parseo, MVC, BD, reglas de negocio) |
-| [manual_usuario.md](manual_usuario.md) | Guía de uso de la app, incluyendo API REST (usuarios, saltos, comparativa) |
-| [futbol.md](futbol.md) | Detalle del módulo futbol, métricas y endpoints |
-| [../modules/futbol/ANALITICA_AVANZADA.md](../modules/futbol/ANALITICA_AVANZADA.md) | Documento de referencia de la extensión analítica del módulo futbol (10 fases) |
-| [historial_tecnico_2026-04-13.md](historial_tecnico_2026-04-13.md) | Bitácora técnica del día: regresiones, causas y fixes aplicados |
-| [historial_tecnico_2026-05-04.md](historial_tecnico_2026-05-04.md) | Bitácora técnica del día: módulo futbol y usuarios |
-| [historial_tecnico_2026-05-05.md](historial_tecnico_2026-05-05.md) | Bitácora técnica del día: analítica avanzada futbol + landmarks cliente |
-| [checklist_validacion_salto_vh_realtime_galeria.md](checklist_validacion_salto_vh_realtime_galeria.md) | Plan de pruebas funcional para vertical/horizontal y realtime/galería |
-| [entrega_cambios_2026-04-13.md](entrega_cambios_2026-04-13.md) | Documento de traspaso completo con todo lo nuevo y todo lo modificado |
-| [entrega_cambios_2026-05-04.md](entrega_cambios_2026-05-04.md) | Documento de traspaso: usuarios y biblioteca de futbol |
+Este índice separa documentación vigente de documentación histórica para evitar confusiones.
+
+## Documentación Vigente (Canónica)
+
+| Documento | Uso |
+|-----------|-----|
+| [manual_usuario.md](manual_usuario.md) | Operación diaria: arranque, uso y resolución rápida de problemas |
+| [arquitectura.md](arquitectura.md) | Arquitectura de alto nivel, módulos y responsabilidades |
+| [flujo_datos.md](flujo_datos.md) | Recorrido de datos desde captura hasta persistencia |
+| [decisiones_tecnicas.md](decisiones_tecnicas.md) | Decisiones de diseño y criterios técnicos |
+| [fases_proyecto.md](fases_proyecto.md) | Estado funcional y avance por fases |
+| [futbol.md](futbol.md) | Referencia funcional del módulo fútbol |
+| [checklist_validacion_salto_vh_realtime_galeria.md](checklist_validacion_salto_vh_realtime_galeria.md) | Validación funcional de flujos críticos |
+| [../DOCUMENTACION_CONFIG_REALTIME_BALON.md](../DOCUMENTACION_CONFIG_REALTIME_BALON.md) | Estado consolidado de configuración realtime y refactor reciente |
+| [../modules/futbol/ANALITICA_AVANZADA.md](../modules/futbol/ANALITICA_AVANZADA.md) | Referencia de analítica avanzada del módulo fútbol |
+
+## Documentación Histórica (Referencia)
+
+Estos documentos son bitácoras de cambios y contexto de migraciones. No son la fuente operativa principal.
+
+| Documento | Tipo |
+|-----------|------|
+| [CAMBIOS_2026_05_07.md](CAMBIOS_2026_05_07.md) | Registro de cambios puntuales |
+| [entrega_cambios_2026-04-13.md](entrega_cambios_2026-04-13.md) | Entrega histórica |
+| [entrega_cambios_2026-05-04.md](entrega_cambios_2026-05-04.md) | Entrega histórica |
+| [historial_tecnico_2026-04-13.md](historial_tecnico_2026-04-13.md) | Bitácora técnica |
+| [historial_tecnico_2026-05-04.md](historial_tecnico_2026-05-04.md) | Bitácora técnica |
+| [historial_tecnico_2026-05-05.md](historial_tecnico_2026-05-05.md) | Bitácora técnica |
+| [SOLUCION_BIBLIOTECA_VIDEOS_SALTO.md](SOLUCION_BIBLIOTECA_VIDEOS_SALTO.md) | Incidencia histórica |
+| [rework_biblioteca_videos_2026_05_07.md](rework_biblioteca_videos_2026_05_07.md) | Rework histórico |
+| [ANALISIS_COMPLETO_MEJORAS_2026-05-08.md](ANALISIS_COMPLETO_MEJORAS_2026-05-08.md) | Análisis histórico |
+| [IMPLEMENTACION_4_CRITICAS_2026-05-08.md](IMPLEMENTACION_4_CRITICAS_2026-05-08.md) | Implementación histórica |
+| [OPTIMIZACION_FLUIDEZ_2026-05-08.md](OPTIMIZACION_FLUIDEZ_2026-05-08.md) | Optimización histórica |
+| [DETECCION_BALON_ANALISIS.md](DETECCION_BALON_ANALISIS.md) | Investigación histórica |
+
+## Criterio de Uso
+
+1. Para trabajar el sistema hoy: usa primero la sección canónica.
+2. Para contexto y trazabilidad: consulta documentos históricos.
+3. Si hay conflicto entre documentos: prevalece la documentación canónica.

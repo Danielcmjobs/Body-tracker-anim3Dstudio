@@ -3,6 +3,14 @@
 **Estado**: Completado + Optimizado  
 **Recomendaciones**: Críticas, Altas, Medias, Bajas
 
+> Documento histórico de análisis.
+> Para operación y estado vigente, consultar `docs/README.md`, `docs/manual_usuario.md` y `DOCUMENTACION_CONFIG_REALTIME_BALON.md`.
+
+## Resumen Ejecutivo
+- Documento de revisión amplia con propuestas de mejora transversales.
+- Útil como contexto técnico e inventario de deuda, no como guía operativa actual.
+- Algunas recomendaciones pueden haber sido absorbidas, modificadas o descartadas posteriormente.
+
 ---
 
 ## I. FRONTEND - VALIDACIÓN Y SEGURIDAD

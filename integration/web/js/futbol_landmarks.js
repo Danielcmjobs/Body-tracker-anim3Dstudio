@@ -40,9 +40,45 @@ let lastLiveTime = -1;
 let lastPreviewTime = -1;
 let previewUrl = null;
 
-// Estado de la heuristica del balon (por flujo).
+
+// Estado de la heurística del balón (por flujo) y semilla manual
 const ballStateLive = crearEstadoBalon();
 const ballStatePreview = crearEstadoBalon();
+let manualBallSeedLive = null; // {nx, ny} normalizado a 0..1
+let manualBallSeedPreview = null; // {nx, ny} normalizado a 0..1
+
+function registrarSemillaManual(elemento, asignarSemilla) {
+    if (!elemento) {
+        return;
+    }
+
+    const guardarSemilla = function (clientX, clientY) {
+        const rect = elemento.getBoundingClientRect();
+        if (!rect.width || !rect.height) {
+            return;
+        }
+        const nx = Math.min(1, Math.max(0, (clientX - rect.left) / rect.width));
+        const ny = Math.min(1, Math.max(0, (clientY - rect.top) / rect.height));
+        asignarSemilla({ nx, ny });
+    };
+
+    elemento.addEventListener('touchstart', function (e) {
+        if (e.touches && e.touches.length > 0) {
+            guardarSemilla(e.touches[0].clientX, e.touches[0].clientY);
+        }
+    }, { passive: true });
+
+    elemento.addEventListener('mousedown', function (e) {
+        guardarSemilla(e.clientX, e.clientY);
+    });
+}
+
+registrarSemillaManual(videoLive, function (seed) {
+    manualBallSeedLive = seed;
+});
+registrarSemillaManual(previewVideo, function (seed) {
+    manualBallSeedPreview = seed;
+});
 
 function crearEstadoBalon() {
     return {
@@ -51,6 +87,7 @@ function crearEstadoBalon() {
         prev: null,
         frameCount: 0,
         ultimaDeteccion: null,
+        manualSeed: null,
         ancho: 0,
         alto: 0
     };
@@ -165,11 +202,16 @@ function obtenerCentroPies(landmarks, ancho, alto) {
     };
 }
 
+// DESACTIVADO: Detección por apariencia era muy costosa (clustering O(n²))
+// Usar solo motion-based detection para mejor rendimiento en móvil.
+// Si necesitas detección de pelota quieta, usar análisis offline post-grabación.
+
 // Heuristica simple de deteccion de balon basada en diferencia de frames (movimiento).
 // - Usa un canvas reducido para rapidez.
 // - Busca la nube de pixeles con mayor movimiento.
 // - Ajusta la posicion con suavizado temporal.
-function detectarBalon(video, landmarks, estado, salidaAncho, salidaAlto) {
+// - HÍBRIDO: Si motion no detecta, intenta appearance-based (color + forma).
+function detectarBalon(video, landmarks, estado, salidaAncho, salidaAlto, manualSeed) {
     if (!video || !estado) {
         return null;
     }
@@ -179,6 +221,34 @@ function detectarBalon(video, landmarks, estado, salidaAncho, salidaAlto) {
     const videoH = video.videoHeight || 0;
     if (!videoW || !videoH) {
         return null;
+    }
+
+    // Si hay semilla manual, usarla como detección inicial y resetear tras usar
+    if (manualSeed && typeof manualSeed.nx === 'number' && typeof manualSeed.ny === 'number') {
+        // Convertir coordenadas normalizadas a la escala interna y de salida
+        const escala = scaleBase / videoW;
+        const targetW = Math.max(120, Math.round(videoW * escala));
+        const targetH = Math.max(90, Math.round(videoH * escala));
+        const xRaw = manualSeed.nx * targetW;
+        const yRaw = manualSeed.ny * targetH;
+        const radio = Math.max(8, Math.round(targetW * 0.04));
+        estado.ultimaDeteccion = {
+            xRaw,
+            yRaw,
+            rRaw: radio,
+            x: manualSeed.nx * salidaAncho,
+            y: manualSeed.ny * salidaAlto,
+            r: radio * (salidaAncho / targetW)
+        };
+        estado.manualSeed = {
+            xRaw,
+            yRaw,
+            ttl: 8
+        };
+        // Limpiar semilla tras usarla
+        if (video === videoLive) manualBallSeedLive = null;
+        if (video === previewVideo) manualBallSeedPreview = null;
+        return estado.ultimaDeteccion;
     }
 
     const escala = scaleBase / videoW;
@@ -199,11 +269,8 @@ function detectarBalon(video, landmarks, estado, salidaAncho, salidaAlto) {
         return null;
     }
 
-    // Throttle: procesa 1 de cada 2 frames para aligerar.
+    // Throttle: procesar CADA frame (no skip) para mejor reactividad en móvil
     estado.frameCount += 1;
-    if (estado.frameCount % 2 !== 0) {
-        return estado.ultimaDeteccion;
-    }
 
     estado.ctx.drawImage(video, 0, 0, targetW, targetH);
     const curr = estado.ctx.getImageData(0, 0, targetW, targetH);
@@ -215,9 +282,11 @@ function detectarBalon(video, landmarks, estado, salidaAncho, salidaAlto) {
 
     const data = curr.data;
     const prev = estado.prev.data;
-    const threshold = estimarThresholdAdaptativo(data, prev);
+    const thresholdAdaptativo = estimarThresholdAdaptativo(data, prev);
+    const thresholdBase = Number.isFinite(configDinamica.rgb_threshold) ? configDinamica.rgb_threshold : 35;
+    const threshold = Math.max(12, Math.round((thresholdAdaptativo + thresholdBase) * 0.5));
     const area = targetW * targetH;
-    const minPixels = Math.max(18, Math.round(area * 0.0015));
+    const minPixels = Math.max(10, Math.round(area * 0.0009));
 
     let sumX = 0;
     let sumY = 0;
@@ -227,16 +296,36 @@ function detectarBalon(video, landmarks, estado, salidaAncho, salidaAlto) {
     let maxX = 0;
     let maxY = 0;
 
-    for (let i = 0; i < data.length; i += 4) {
-        const dr = Math.abs(data[i] - prev[i]);
-        const dg = Math.abs(data[i + 1] - prev[i + 1]);
-        const db = Math.abs(data[i + 2] - prev[i + 2]);
-        const diff = (dr + dg + db) / 3;
+    const pies = obtenerCentroPies(landmarks, targetW, targetH);
+    const centroBusqueda = (estado.manualSeed && estado.manualSeed.ttl > 0)
+        ? { x: estado.manualSeed.xRaw, y: estado.manualSeed.yRaw }
+        : pies;
+    const distBusqueda = Number.isFinite(configDinamica.search_distance)
+        ? Math.max(30, Math.round(configDinamica.search_distance * (targetW / Math.max(1, salidaAncho))))
+        : Math.round(Math.min(targetW, targetH) * 0.45);
 
-        if (diff > threshold) {
-            const idx = i / 4;
-            const x = idx % targetW;
-            const y = Math.floor(idx / targetW);
+    const roi = centroBusqueda ? {
+        minX: Math.max(0, Math.floor(centroBusqueda.x - distBusqueda)),
+        maxX: Math.min(targetW - 1, Math.ceil(centroBusqueda.x + distBusqueda)),
+        minY: Math.max(0, Math.floor(centroBusqueda.y - distBusqueda)),
+        maxY: Math.min(targetH - 1, Math.ceil(centroBusqueda.y + distBusqueda)),
+    } : {
+        minX: 0,
+        maxX: targetW - 1,
+        minY: 0,
+        maxY: targetH - 1,
+    };
+
+    for (let y = roi.minY; y <= roi.maxY; y += 1) {
+        for (let x = roi.minX; x <= roi.maxX; x += 1) {
+            const idx = (y * targetW + x) * 4;
+            const dr = Math.abs(data[idx] - prev[idx]);
+            const dg = Math.abs(data[idx + 1] - prev[idx + 1]);
+            const db = Math.abs(data[idx + 2] - prev[idx + 2]);
+            const diff = (dr + dg + db) / 3;
+            if (diff <= threshold) {
+                continue;
+            }
             sumX += x;
             sumY += y;
             count += 1;
@@ -249,7 +338,20 @@ function detectarBalon(video, landmarks, estado, salidaAncho, salidaAlto) {
 
     estado.prev = curr;
 
+    // Solo detectar por movimiento (rápido, optimizado para móvil)
     if (count < minPixels) {
+        if (estado.manualSeed && estado.manualSeed.ttl > 0) {
+            estado.manualSeed.ttl -= 1;
+        }
+        return estado.ultimaDeteccion;
+    }
+
+    const roiArea = Math.max(1, (roi.maxX - roi.minX + 1) * (roi.maxY - roi.minY + 1));
+    if (count > roiArea * 0.45) {
+        // Evita tomar movimiento global del cuerpo/fondo como balón.
+        if (estado.manualSeed && estado.manualSeed.ttl > 0) {
+            estado.manualSeed.ttl -= 1;
+        }
         return estado.ultimaDeteccion;
     }
 
@@ -257,12 +359,14 @@ function detectarBalon(video, landmarks, estado, salidaAncho, salidaAlto) {
     let cy = sumY / count;
     let radio = Math.max(6, Math.sqrt(count / Math.PI));
 
-    const pies = obtenerCentroPies(landmarks, targetW, targetH);
     if (pies) {
         const dist = Math.hypot(cx - pies.x, cy - pies.y);
-        const factorDist = estado.ultimaDeteccion ? 1.1 : 0.75;
-        const maxDist = Math.max(targetW, targetH) * factorDist;
+        const factorDist = estado.ultimaDeteccion ? 1.2 : 0.9;
+        const maxDist = Math.max(25, distBusqueda * factorDist);
         if (dist > maxDist) {
+            if (estado.manualSeed && estado.manualSeed.ttl > 0) {
+                estado.manualSeed.ttl -= 1;
+            }
             return estado.ultimaDeteccion;
         }
     }
@@ -289,6 +393,10 @@ function detectarBalon(video, landmarks, estado, salidaAncho, salidaAlto) {
         y: (cy / targetH) * salidaAlto,
         r: (radio / targetW) * salidaAncho
     };
+
+    if (estado.manualSeed && estado.manualSeed.ttl > 0) {
+        estado.manualSeed.ttl -= 1;
+    }
 
     return estado.ultimaDeteccion;
 }
@@ -320,8 +428,10 @@ function actualizarConfiguracionEnVivo(nuevaConfig) {
     // Resetear estado de detección para que se recalcule con nuevos parámetros
     ballStateLive.prev = null;
     ballStateLive.ultimaDeteccion = null;
+    ballStateLive.manualSeed = null;
     ballStatePreview.prev = null;
     ballStatePreview.ultimaDeteccion = null;
+    ballStatePreview.manualSeed = null;
     
     console.log("[futbol_landmarks] Configuración actualizada en vivo:", configDinamica);
 }
@@ -354,7 +464,14 @@ async function renderLiveLoop() {
             drawPose(ctxLive, pose);
         }
 
-        const balon = detectarBalon(videoLive, pose, ballStateLive, canvasLive.width, canvasLive.height);
+        const balon = detectarBalon(
+            videoLive,
+            pose,
+            ballStateLive,
+            canvasLive.width,
+            canvasLive.height,
+            manualBallSeedLive
+        );
         if (balon) {
             drawBall(ctxLive, balon);
         }
@@ -389,7 +506,14 @@ async function renderPreviewLoop() {
             drawPose(previewCtx, pose);
         }
 
-        const balon = detectarBalon(previewVideo, pose, ballStatePreview, previewCanvas.width, previewCanvas.height);
+        const balon = detectarBalon(
+            previewVideo,
+            pose,
+            ballStatePreview,
+            previewCanvas.width,
+            previewCanvas.height,
+            manualBallSeedPreview
+        );
         if (balon) {
             drawBall(previewCtx, balon);
         }

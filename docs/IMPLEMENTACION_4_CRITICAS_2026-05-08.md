@@ -3,6 +3,14 @@
 **Status**: ✅ Código completo + Tests + Documentación  
 **Esfuerzo**: ~3-4 horas de trabajo
 
+> Documento histórico de implementación.
+> Para la referencia vigente del sistema, consultar `docs/README.md` y `docs/manual_usuario.md`.
+
+## Resumen Ejecutivo
+- Recoge una entrega cerrada centrada en seguridad, validación y endurecimiento técnico.
+- Sirve como trazabilidad de una intervención concreta, no como fuente única del estado actual.
+- Verificar siempre el código actual antes de reutilizar decisiones descritas aquí.
+
 ---
 
 ## Resumen de Cambios

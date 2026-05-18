@@ -3,8 +3,6 @@
  * Permite cambiar parámetros mientras la app está en uso.
  */
 
-import { actualizarConfiguracionEnVivo } from './futbol_landmarks.js';
-
 // ============================================================
 // ============================================================
 
@@ -19,7 +17,16 @@ let configGlobal = {
     search_distance: 150,
 };
 
-const API_CONFIG_URL = "https://localhost:5002/api/futbol/config";
+function resolverApiConfigUrl() {
+    if (typeof getFutbolBaseUrl === "function") {
+        return `${getFutbolBaseUrl()}/api/futbol/config`;
+    }
+    const proto = window.location.protocol === "https:" ? "https" : "http";
+    const host = window.location.hostname || "localhost";
+    return `${proto}://${host}:5002/api/futbol/config`;
+}
+
+const API_CONFIG_URL = resolverApiConfigUrl();
 
 // ============================================================
 // FUNCIONES DE CARGA/SINCRONIZACION
@@ -44,6 +51,7 @@ async function cargarConfiguracionDelServidor() {
         if (datos.status === "success" && datos.settings) {
             configGlobal = { ...configGlobal, ...datos.settings };
             actualizarUIDesdeConfig();
+            notificarCambiosAOverlay(configGlobal);
             console.log("[ConfigPanel] Configuración cargada del servidor:", configGlobal);
             return true;
         }
@@ -71,10 +79,15 @@ async function enviarCambiosAlServidor(cambios) {
         
         const datos = await response.json();
         if (datos.status === "success") {
-            configGlobal = { ...configGlobal, ...cambios };
+            // Usar la respuesta autoritativa del servidor (puede haber coercionado valores)
+            const settingsServidor = datos.settings && typeof datos.settings === "object"
+                ? datos.settings
+                : cambios;
+            configGlobal = { ...configGlobal, ...settingsServidor };
+            actualizarUIDesdeConfig();
             mostrarEstadoActualizado();
-            console.log("[ConfigPanel] Configuración actualizada en servidor:", cambios);
-            
+            console.log("[ConfigPanel] Configuración actualizada en servidor:", settingsServidor);
+
             // Notificar a futbol_landmarks.js que recargar configuración
             notificarCambiosAOverlay(configGlobal);
             return true;
@@ -85,32 +98,44 @@ async function enviarCambiosAlServidor(cambios) {
     return false;
 }
 
+function notificarCambiosAOverlay(configActual) {
+    if (typeof window.actualizarConfiguracionEnVivo === "function") {
+        window.actualizarConfiguracionEnVivo(configActual);
+        return;
+    }
+    console.warn("[ConfigPanel] actualizarConfiguracionEnVivo no disponible todavía.");
+}
+
 /**
  * Actualiza los controles UI según configGlobal.
  */
 function actualizarUIDesdeConfig() {
-    const selectMode = document.getElementById("config-mode");
     const inputRGB = document.getElementById("config-rgb-threshold");
     const inputMotion = document.getElementById("config-motion-threshold");
     const inputDist = document.getElementById("config-search-distance");
     const inputConf = document.getElementById("config-confidence");
     
-    if (selectMode) selectMode.value = configGlobal.ball_detector_mode;
     if (inputRGB) {
         inputRGB.value = configGlobal.rgb_threshold;
-        document.getElementById("config-rgb-value").textContent = configGlobal.rgb_threshold;
+        const rgbValue = document.getElementById("config-rgb-value");
+        if (rgbValue) rgbValue.textContent = String(configGlobal.rgb_threshold);
     }
     if (inputMotion) {
         inputMotion.value = configGlobal.motion_threshold;
-        document.getElementById("config-motion-value").textContent = configGlobal.motion_threshold;
+        const motionValue = document.getElementById("config-motion-value");
+        if (motionValue) motionValue.textContent = String(configGlobal.motion_threshold);
     }
     if (inputDist) {
         inputDist.value = configGlobal.search_distance;
-        document.getElementById("config-distance-value").textContent = configGlobal.search_distance;
+        const distanceValue = document.getElementById("config-distance-value");
+        if (distanceValue) distanceValue.textContent = String(configGlobal.search_distance);
     }
     if (inputConf) {
         inputConf.value = configGlobal.confidence_threshold;
-        document.getElementById("config-conf-value").textContent = configGlobal.confidence_threshold.toFixed(2);
+        const confidenceValue = document.getElementById("config-conf-value");
+        if (confidenceValue && Number.isFinite(Number(configGlobal.confidence_threshold))) {
+            confidenceValue.textContent = Number(configGlobal.confidence_threshold).toFixed(2);
+        }
     }
 }
 
@@ -139,14 +164,6 @@ function inicializarPanelConfiguracion() {
     if (toggleBtn && panelContent) {
         toggleBtn.addEventListener("click", () => {
             panelContent.style.display = panelContent.style.display === "none" ? "block" : "none";
-        });
-    }
-    
-    // Select modo
-    const selectMode = document.getElementById("config-mode");
-    if (selectMode) {
-        selectMode.addEventListener("change", async (e) => {
-            await enviarCambiosAlServidor({ ball_detector_mode: e.target.value });
         });
     }
     

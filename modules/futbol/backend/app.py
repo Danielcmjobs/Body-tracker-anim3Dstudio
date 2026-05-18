@@ -43,11 +43,10 @@ from services.analitica_service import (
 )
 from services.settings_service import (
     obtener_todos,
-    obtener_setting,
-    actualizar_setting,
     actualizar_varios,
     guardar_settings,
 )
+from utils.form_parsing import parse_bool
 from utils.serializers import serializar_row as _serializar
 
 app = Flask(__name__)
@@ -91,71 +90,73 @@ def analizar_golpeo():
     ruta_video = os.path.join(UPLOAD_FOLDER, nombre_archivo)
     archivo.save(ruta_video)
 
-    incluir_landmarks = (request.form.get("incluir_landmarks", "false").strip().lower() in {
-        "1", "true", "si", "yes"
-    })
-    usar_ml_balon = (request.form.get("usar_ml_balon", "false").strip().lower() in {
-        "1", "true", "si", "yes"
-    })
+    incluir_landmarks = parse_bool(request.form.get("incluir_landmarks"), default=False)
+    usar_ml_balon = parse_bool(request.form.get("usar_ml_balon"), default=False)
 
     try:
-        resultado = controller.procesar_golpeo(
-            ruta_video,
-            incluir_landmarks=incluir_landmarks,
-            usar_ml_balon=usar_ml_balon,
-        )
-    except Exception as e:
-        app.logger.error(f"Error al procesar el video: {e}", exc_info=True)
-        return jsonify({"error": "Ocurrió un error interno al procesar el video."}), 500
-
-
-    id_usuario = request.form.get("id_usuario")
-    guardar_video_bd = (request.form.get("guardar_video_bd", "false").strip().lower() in {
-        "1", "true", "si", "yes"
-    })
-    guardar_bd = request.form.get("guardar_bd", "false").strip().lower() in {"1", "true", "si", "yes"}
-    guardar_bd = guardar_bd or guardar_video_bd
-
-    if guardar_bd:
-        # Validar que id_usuario es obligatorio si se va a guardar
-        if not id_usuario or str(id_usuario).strip() == '':
-            return jsonify({"error": "id_usuario es obligatorio cuando se guarda en BD"}), 400
-        
         try:
-            id_usuario_int = int(id_usuario)
-        except (ValueError, TypeError):
-            return jsonify({"error": "id_usuario debe ser un entero"}), 400
-
-        if not modelo_usuario.obtener_por_id(id_usuario_int):
-            return jsonify({"error": "Usuario no encontrado"}), 404
-
-        metodo_origen = request.form.get("metodo_origen", "video_galeria").strip().lower()
-        if metodo_origen not in {"ia_vivo", "video_galeria"}:
-            metodo_origen = "video_galeria"
-
-        try:
-            payload = modelo_futbol.guardar_golpeo(id_usuario_int, resultado, metodo_origen=metodo_origen)
-            resultado["id_golpeo"] = payload.get("id_golpeo")
+            resultado = controller.procesar_golpeo(
+                ruta_video,
+                incluir_landmarks=incluir_landmarks,
+                usar_ml_balon=usar_ml_balon,
+            )
         except Exception as e:
-            app.logger.error(f"Error al guardar el golpeo en la BD: {e}", exc_info=True)
-            return jsonify({"error": "No se pudo guardar el golpeo en la base de datos."}), 500
+            app.logger.error(f"Error al procesar el video: {e}", exc_info=True)
+            return jsonify({"error": "Ocurrió un error interno al procesar el video."}), 500
 
-        if guardar_video_bd and resultado.get("id_golpeo"):
+
+        id_usuario = request.form.get("id_usuario")
+        guardar_video_bd = parse_bool(request.form.get("guardar_video_bd"), default=False)
+        guardar_bd = parse_bool(request.form.get("guardar_bd"), default=False)
+        guardar_bd = guardar_bd or guardar_video_bd
+
+        if guardar_bd:
+            # Validar que id_usuario es obligatorio si se va a guardar
+            if not id_usuario or str(id_usuario).strip() == '':
+                return jsonify({"error": "id_usuario es obligatorio cuando se guarda en BD"}), 400
+            
             try:
-                with open(ruta_video, "rb") as f:
-                    video_bytes = f.read()
-                guardado = modelo_futbol.guardar_video_bd(
-                    id_golpeo=int(resultado["id_golpeo"]),
-                    video_bytes=video_bytes,
-                    video_nombre=secure_filename(archivo.filename) or nombre_archivo,
-                    video_mime=archivo.mimetype,
-                )
-                resultado["video_guardado_bd"] = bool(guardado)
-            except Exception as e:
-                app.logger.error(f"Error al guardar el video en la BD: {e}", exc_info=True)
-                resultado["video_guardado_bd"] = False
+                id_usuario_int = int(id_usuario)
+            except (ValueError, TypeError):
+                return jsonify({"error": "id_usuario debe ser un entero"}), 400
 
-    return jsonify(resultado)
+            if not modelo_usuario.obtener_por_id(id_usuario_int):
+                return jsonify({"error": "Usuario no encontrado"}), 404
+
+            metodo_origen = request.form.get("metodo_origen", "video_galeria").strip().lower()
+            if metodo_origen not in {"ia_vivo", "video_galeria"}:
+                metodo_origen = "video_galeria"
+
+            try:
+                payload = modelo_futbol.guardar_golpeo(id_usuario_int, resultado, metodo_origen=metodo_origen)
+                resultado["id_golpeo"] = payload.get("id_golpeo")
+            except Exception as e:
+                app.logger.error(f"Error al guardar el golpeo en la BD: {e}", exc_info=True)
+                return jsonify({"error": "No se pudo guardar el golpeo en la base de datos."}), 500
+
+            if guardar_video_bd and resultado.get("id_golpeo"):
+                try:
+                    with open(ruta_video, "rb") as f:
+                        video_bytes = f.read()
+                    guardado = modelo_futbol.guardar_video_bd(
+                        id_golpeo=int(resultado["id_golpeo"]),
+                        video_bytes=video_bytes,
+                        video_nombre=secure_filename(archivo.filename) or nombre_archivo,
+                        video_mime=archivo.mimetype,
+                    )
+                    resultado["video_guardado_bd"] = bool(guardado)
+                except Exception as e:
+                    app.logger.error(f"Error al guardar el video en la BD: {e}", exc_info=True)
+                    resultado["video_guardado_bd"] = False
+
+        return jsonify(resultado)
+    finally:
+        # Limpieza: el archivo en disco ya no es necesario tras procesar (y opcionalmente persistir en BD).
+        try:
+            if os.path.exists(ruta_video):
+                os.remove(ruta_video)
+        except OSError as e:
+            app.logger.warning(f"No se pudo eliminar archivo temporal {ruta_video}: {e}")
 
 
 # ─────────────────────────────────────────────────────────────
@@ -203,6 +204,13 @@ def video_anotado():
     except Exception as e:
         app.logger.error(f"Error generando video anotado: {e}", exc_info=True)
         return jsonify({"error": "No se pudo generar el video anotado."}), 500
+    finally:
+        # El video de entrada ya no se necesita tras anotar.
+        try:
+            if os.path.exists(ruta_in):
+                os.remove(ruta_in)
+        except OSError as e:
+            app.logger.warning(f"No se pudo eliminar archivo temporal {ruta_in}: {e}")
 
     if not ok or not os.path.exists(ruta_out):
         return jsonify({"error": "No se pudo generar el video anotado."}), 500
@@ -337,11 +345,13 @@ def actualizar_config():
     """
     try:
         datos = request.get_json() or {}
-        
-        # Actualizar configuración
+        if not isinstance(datos, dict):
+            return jsonify({
+                "status": "error",
+                "message": "Se esperaba un objeto JSON con la configuración"
+            }), 400
+
         count = actualizar_varios(datos)
-        
-        # Guardar en disco (opcional - para persistencia)
         guardar_settings()
         
         return jsonify({
@@ -349,28 +359,30 @@ def actualizar_config():
             "updated": count,
             "settings": obtener_todos()
         }), 200
-    except Exception as e:
+    except ValueError as e:
         return jsonify({
             "status": "error",
             "message": str(e)
         }), 400
+    except Exception as e:
+        app.logger.error(f"Error al actualizar configuración: {e}", exc_info=True)
+        return jsonify({
+            "status": "error",
+            "message": "Error interno al actualizar la configuración."
+        }), 500
 
 
 if __name__ == "__main__":
     project_root = os.path.normpath(os.path.join(os.path.dirname(__file__), "..", "..", ".."))
     cert_file = os.path.join(project_root, "certs", "cert.pem")
     key_file = os.path.join(project_root, "certs", "key.pem")
-    ssl_context = None
-    force_http = os.getenv("FUTBOL_FORCE_HTTP", "0").strip().lower() in ("1", "true", "yes", "on")
+    if not (os.path.exists(cert_file) and os.path.exists(key_file)):
+        raise RuntimeError(
+            "No se encontraron certificados SSL en certs/cert.pem y certs/key.pem. "
+            "Ejecuta scripts/generate_cert.py antes de iniciar el backend."
+        )
 
-    if force_http:
-        print("[INFO] FUTBOL_FORCE_HTTP activo. Arrancando API de futbol en HTTP.")
-        print(f"[INFO] API disponible en http://localhost:{FLASK_PORT}/api/futbol/analizar")
-    elif os.path.exists(cert_file) and os.path.exists(key_file):
-        ssl_context = (cert_file, key_file)
-        print(f"[INFO] API disponible en https://localhost:{FLASK_PORT}/api/futbol/analizar")
-    else:
-        print("[WARN] Certificados SSL no encontrados en certs/. Arrancando en HTTP.")
-        print(f"[INFO] API disponible en http://localhost:{FLASK_PORT}/api/futbol/analizar")
+    ssl_context = (cert_file, key_file)
+    print(f"[INFO] API disponible en https://localhost:{FLASK_PORT}/api/futbol/analizar")
 
     app.run(host="0.0.0.0", port=FLASK_PORT, debug=False, ssl_context=ssl_context)

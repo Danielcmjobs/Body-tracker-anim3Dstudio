@@ -2,23 +2,29 @@
 Pool de conexiones a MySQL.
 """
 
+from threading import Lock
+
 from mysql.connector import pooling
 
 from config import DB_CONFIG
 
 _pool: pooling.MySQLConnectionPool | None = None
+_pool_lock = Lock()
 
 
-# Crea o reutiliza el pool de conexiones MySQL.
+# Crea o reutiliza el pool de conexiones MySQL (thread-safe).
 def _get_pool() -> pooling.MySQLConnectionPool:
     global _pool
-    if _pool is None:
-        _pool = pooling.MySQLConnectionPool(
-            pool_name="anim3d_futbol_pool",
-            pool_size=10,
-            pool_reset_session=True,
-            **DB_CONFIG,
-        )
+    if _pool is not None:
+        return _pool
+    with _pool_lock:
+        if _pool is None:
+            _pool = pooling.MySQLConnectionPool(
+                pool_name="anim3d_futbol_pool",
+                pool_size=10,
+                pool_reset_session=True,
+                **DB_CONFIG,
+            )
     return _pool
 
 

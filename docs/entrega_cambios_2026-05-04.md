@@ -1,5 +1,8 @@
 # Entrega de cambios — 2026-05-04
 
+> Documento histórico de entrega.
+> Para operación vigente, consultar `docs/README.md`, `docs/manual_usuario.md` y `DOCUMENTACION_CONFIG_REALTIME_BALON.md`.
+
 ## Objetivo
 
 Replicar el sistema de usuarios del modulo salto en el modulo futbol, con guardado opcional de videos en BD y biblioteca web.

@@ -48,19 +48,20 @@ mysql -u root -p < scripts\init_db.sql
 
 ### Opción rápida (recomendada)
 
-Doble clic en **`scripts\run_all.bat`**. Se abrirán tres ventanas de terminal automáticamente.
+Doble clic en **`scripts\run_all.bat`**. Se abrirán cuatro ventanas de terminal automáticamente.
 
 ### Opción manual — HTTPS (recomendada)
 
-Abrir tres terminales y ejecutar en cada una:
+Abrir cuatro terminales y ejecutar en cada una:
 
 | Terminal | Comando | Puerto |
 |----------|---------|--------|
 | Backend Salto | `cd modules\salto\backend` → `python app.py` | 5001 |
+| Backend Futbol | `cd modules\futbol\backend` → `python app.py` | 5002 |
 | Backend Sensor | `cd modules\sensor\backend` → `python app.py` | 5000 |
-| Frontend Web | `cd integration\web` → `python -m http.server 8080` | 8080 |
+| Frontend Web | `cd .` → `python scripts\https_server.py` | 8443 |
 
-Una vez arrancado, abrir en el navegador: **http://localhost:8080**
+Una vez arrancado, abrir en el navegador: **https://localhost:8443**
 
 ---
 
