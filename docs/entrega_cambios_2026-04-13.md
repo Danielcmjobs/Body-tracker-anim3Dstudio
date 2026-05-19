@@ -4,6 +4,9 @@ Proyecto: body-tracking-anim3d
 
 ## 1. Resumen ejecutivo
 
+> Documento histórico de entrega.
+> Para operación vigente, consultar `docs/README.md`, `docs/manual_usuario.md` y `DOCUMENTACION_CONFIG_REALTIME_BALON.md`.
+
 Durante esta jornada se cerraron cuatro bloques:
 
 - Estabilidad funcional del analisis de salto (datos base + paneles avanzados).
@@ -177,11 +180,6 @@ En resultados de salto, los campos relevantes son:
    - scripts\run_all.bat
 4. Abrir:
    - https://localhost:8443
-
-Modo alternativo (legacy):
-
-- Frontend HTTP manual en `http://localhost:8080` con `python -m http.server 8080`.
-- Para entorno totalmente HTTP, arrancar sin certificados locales en `certs/`.
 
 Validacion minima:
 

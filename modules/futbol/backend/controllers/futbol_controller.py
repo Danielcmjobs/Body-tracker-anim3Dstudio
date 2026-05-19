@@ -40,7 +40,12 @@ class FutbolController:
         self.processor = VideoProcessor()
         self.calculo = CalculoService()
 
-    def procesar_golpeo(self, ruta_video: str, incluir_landmarks: bool = False) -> dict:
+    def procesar_golpeo(
+        self,
+        ruta_video: str,
+        incluir_landmarks: bool = False,
+        usar_ml_balon: bool = False,
+    ) -> dict:
         frames, info = self.processor.procesar(ruta_video)
         if not frames or info is None:
             return _respuesta_vacia("No se detectaron landmarks en el video.")

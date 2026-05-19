@@ -99,3 +99,26 @@ CLASIFICACIONES_GOLPEO: tuple[str, ...] = (
 UMBRAL_VELOCIDAD_BAJA_MS: float = float(os.getenv("UMBRAL_VELOCIDAD_BAJA", "5.0"))
 UMBRAL_ESTABILIDAD_BAJA: float = float(os.getenv("UMBRAL_ESTABILIDAD_BAJA", "0.50"))
 UMBRAL_ANGULO_RIESGO_DEG: float = float(os.getenv("UMBRAL_ANGULO_RIESGO", "75.0"))
+
+# ─────────────────────────────────────────────────────────────
+# Detector de balon por ML (offline, post-analisis)
+# Modo recomendado: desactivado por defecto para no penalizar tiempo de respuesta.
+# Activar por request (usar_ml_balon=true) y con modelo ONNX configurado.
+# ─────────────────────────────────────────────────────────────
+
+BALL_DETECTOR_MODE: str = os.getenv("BALL_DETECTOR_MODE", "none")
+_default_ball_model_path = os.path.normpath(
+    os.path.join(
+        os.path.dirname(__file__),
+        "models_ml",
+        "yolov5n.onnx",
+    )
+)
+BALL_DETECTOR_MODEL_PATH: str = os.getenv(
+    "BALL_DETECTOR_MODEL_PATH",
+    _default_ball_model_path,
+).strip()
+BALL_DETECTOR_INPUT_SIZE: int = int(os.getenv("BALL_DETECTOR_INPUT_SIZE", "640"))
+BALL_DETECTOR_CONF_THRESHOLD: float = float(os.getenv("BALL_DETECTOR_CONF_THRESHOLD", "0.35"))
+BALL_DETECTOR_IOU_THRESHOLD: float = float(os.getenv("BALL_DETECTOR_IOU_THRESHOLD", "0.45"))
+BALL_DETECTOR_MAX_FRAMES: int = int(os.getenv("BALL_DETECTOR_MAX_FRAMES", "240"))

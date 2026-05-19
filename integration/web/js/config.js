@@ -7,6 +7,7 @@
 const BACKEND_SALTO_PORT = 5001;
 const BACKEND_SENSOR_PORT = 5000;
 const BACKEND_FUTBOL_PORT = 5002;
+const BACKEND_PROTOCOL = 'https';
 
 function getCurrentHost() {
     const host = (window.location.hostname || '').trim();
@@ -14,14 +15,8 @@ function getCurrentHost() {
 }
 
 function getCurrentProtocol() {
-    const proto = String(window.location.protocol || '').toLowerCase();
-    if (proto === 'https:') {
-        return 'https';
-    }
-    if (proto === 'file:') {
-        return 'https';
-    }
-    return 'http';
+    // Unificar entornos: siempre HTTPS para evitar mixed-content y errores de camara.
+    return BACKEND_PROTOCOL;
 }
 
 function getBackendBaseUrl() {
@@ -35,3 +30,13 @@ function getSensorBaseUrl() {
 function getFutbolBaseUrl() {
     return `${getCurrentProtocol()}://${getCurrentHost()}:${BACKEND_FUTBOL_PORT}`;
 }
+
+// Configuracion funcional del frontend.
+// `usarMLBalon` activa el refinado offline en backend (si hay modelo configurado).
+window.APP_CONFIG = window.APP_CONFIG || {};
+window.APP_CONFIG.futbol = Object.assign(
+    {
+        usarMLBalon: false
+    },
+    window.APP_CONFIG.futbol || {}
+);

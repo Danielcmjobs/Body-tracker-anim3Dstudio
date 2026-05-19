@@ -1,5 +1,8 @@
 # Solución: Biblioteca de Vídeos del Módulo Salto No Muestra Vídeos Guardados
 
+> Documento histórico de incidencia resuelta.
+> Para operación vigente, consultar `docs/README.md` y `docs/manual_usuario.md`.
+
 **Fecha:** 2026-05-07  
 **Estado:** RESUELTO  
 **Responsables:** Módulos Frontend (Salto)

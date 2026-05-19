@@ -9,6 +9,10 @@ document.addEventListener('DOMContentLoaded', () => {
     const inputArchivo = document.getElementById('input-archivo-final');
     const labelVisual = document.getElementById('label-visual');
     const selectorModoGrabacion = document.getElementById('modo-grabacion');
+    const chkMlBalon = document.getElementById('chk-ml-balon');
+    const mlBalonEstado = document.getElementById('ml-balon-estado');
+
+    const ML_BALL_LS_KEY = 'futbol_usar_ml_balon';
 
     let mediaRecorder = null;
     let chunks = [];
@@ -61,6 +65,43 @@ document.addEventListener('DOMContentLoaded', () => {
         requestAnimationFrame(() => toast.classList.add('show'));
         // Oculta el toast tras el tiempo indicado.
         setTimeout(() => toast.classList.remove('show'), duracionMs);
+    }
+
+    function getUsarMlBalon() {
+        if (chkMlBalon) {
+            return Boolean(chkMlBalon.checked);
+        }
+        return Boolean(window.APP_CONFIG && window.APP_CONFIG.futbol && window.APP_CONFIG.futbol.usarMLBalon);
+    }
+
+    function actualizarTextoMlBalon() {
+        if (!mlBalonEstado) {
+            return;
+        }
+        mlBalonEstado.textContent = getUsarMlBalon()
+            ? 'ML balón activado: se refina en postproceso (más preciso, más lento).'
+            : 'ML balón desactivado: heurística rápida (tiempo real).';
+    }
+
+    function inicializarPreferenciaMlBalon() {
+        const prefStorage = localStorage.getItem(ML_BALL_LS_KEY);
+        const prefConfig = Boolean(window.APP_CONFIG && window.APP_CONFIG.futbol && window.APP_CONFIG.futbol.usarMLBalon);
+        const valor = prefStorage === null ? prefConfig : prefStorage === '1';
+
+        window.APP_CONFIG = window.APP_CONFIG || {};
+        window.APP_CONFIG.futbol = Object.assign({}, window.APP_CONFIG.futbol || {}, { usarMLBalon: valor });
+
+        if (chkMlBalon) {
+            chkMlBalon.checked = valor;
+            chkMlBalon.addEventListener('change', () => {
+                const activo = Boolean(chkMlBalon.checked);
+                localStorage.setItem(ML_BALL_LS_KEY, activo ? '1' : '0');
+                window.APP_CONFIG.futbol.usarMLBalon = activo;
+                actualizarTextoMlBalon();
+            });
+        }
+
+        actualizarTextoMlBalon();
     }
 
     // Solicita permisos y conecta el stream de la camara.
@@ -389,7 +430,9 @@ document.addEventListener('DOMContentLoaded', () => {
                 guardarBd: guardarBd,
                 guardarVideoBd: guardarVideo && guardarBd,
                 metodoOrigen: metodoOrigen,
-                modoGrabacion: modoGrabacion
+                modoGrabacion: modoGrabacion,
+                incluirLandmarks: true,
+                usarMlBalon: getUsarMlBalon()
             });
 
             // Si llegó otro analisis mientras esperabamos, descartamos este.
@@ -398,6 +441,11 @@ document.addEventListener('DOMContentLoaded', () => {
             }
             ultimoVideoBlob = videoNormalizado;
             pintarResultados(resultado, videoNormalizado);
+            // Lleva al usuario al panel de resultados para que vea las metricas calculadas.
+            const panelMetricas = document.getElementById('futbol-metricas');
+            if (panelMetricas && typeof panelMetricas.scrollIntoView === 'function') {
+                panelMetricas.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            }
             // Vista local con landmarks para reproducir el video analizado en el navegador.
             if (window.futbolLandmarksPreview && typeof window.futbolLandmarksPreview.setVideoBlob === 'function') {
                 window.futbolLandmarksPreview.setVideoBlob(videoNormalizado);
@@ -409,6 +457,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     resultado.frame_impacto ?? null
                 );
             }
+
             mostrarToast('Analisis completado', 'success');
         } catch (error) {
             if (seq === analisisSeq) {
@@ -788,6 +837,7 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
+    inicializarPreferenciaMlBalon();
     aplicarModoGrabacionUI();
     iniciarCamara();
 

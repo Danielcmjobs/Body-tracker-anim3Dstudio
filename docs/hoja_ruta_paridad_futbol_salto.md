@@ -320,7 +320,7 @@ Los endpoints `/curvas` y `/landmarks` ya existen; verificar que `guardar_golpeo
 ### Robustez
 
 ```
-✓ CORS desde https://localhost:8443 y http://localhost:8080
+✓ CORS desde https://localhost:8443
 ✓ Backend caído → mensaje legible en UI en < 3 segundos
 ✓ Archivo de vídeo > MAX_UPLOAD_MB → 413 con mensaje claro
 ```

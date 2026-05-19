@@ -103,6 +103,11 @@
     background: var(--purple-brand) !important;
 }
 
+.ia-error {
+    background: #b00020 !important;
+    color: #fff !important;
+}
+
 .results-content {
     overflow-y: auto;
 }

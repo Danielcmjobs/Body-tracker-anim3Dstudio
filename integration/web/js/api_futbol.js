@@ -75,6 +75,12 @@ async function analizarGolpeo(videoBlob, opciones = {}) {
     if (opciones.incluirLandmarks) {
         formData.append('incluir_landmarks', 'true');
     }
+    const usarMlBalon = (typeof opciones.usarMlBalon === 'boolean')
+        ? opciones.usarMlBalon
+        : Boolean(window.APP_CONFIG && window.APP_CONFIG.futbol && window.APP_CONFIG.futbol.usarMLBalon);
+    if (usarMlBalon) {
+        formData.append('usar_ml_balon', 'true');
+    }
 
     const url = `${getFutbolBaseUrl()}/api/futbol/analizar`;
     return fetchJsonFutbol(url, {

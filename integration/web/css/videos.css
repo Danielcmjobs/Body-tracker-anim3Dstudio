@@ -131,6 +131,7 @@
 .preview-video {
     width: 100%;
     display: block;
+    touch-action: none;
 }
 
 .preview-canvas {

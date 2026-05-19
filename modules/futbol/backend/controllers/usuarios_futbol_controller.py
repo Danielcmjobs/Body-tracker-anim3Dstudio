@@ -9,6 +9,7 @@ import logging
 from flask import Blueprint, jsonify, request
 from mysql.connector import IntegrityError
 from models.usuarios_futbol_model import UsuariosFutbolModel
+from utils.validators import parse_altura_m, parse_peso_kg
 
 usuarios_futbol_bp = Blueprint("usuarios_futbol_bp", __name__)
 modelo = UsuariosFutbolModel()
@@ -32,16 +33,13 @@ def _legacy_response(data, status=200):
 
 
 def _validar_altura(raw):
-    """Devuelve (altura_float, None) o (None, error_msg)."""
+    """Devuelve (altura_float, None) o (None, error_msg). Reutiliza utils/validators."""
     if raw is None or str(raw).strip() == "":
         return None, "La altura (altura_m) es obligatoria"
     try:
-        altura = float(raw)
-    except (TypeError, ValueError):
-        return None, "altura_m debe ser un numero valido"
-    if not (0.50 <= altura <= 2.50):
-        return None, "altura_m debe estar entre 0.50 y 2.50 metros"
-    return altura, None
+        return parse_altura_m(raw), None
+    except ValueError as exc:
+        return None, str(exc)
 
 
 def _validar_peso(raw):
@@ -49,12 +47,9 @@ def _validar_peso(raw):
     if raw is None or str(raw).strip() == "":
         return None, None
     try:
-        peso = float(raw)
-    except (TypeError, ValueError):
-        return None, "peso_kg debe ser un numero valido"
-    if not (20 <= peso <= 300):
-        return None, "peso_kg debe estar entre 20 y 300 kg"
-    return peso, None
+        return parse_peso_kg(raw), None
+    except ValueError as exc:
+        return None, str(exc)
 
 
 @usuarios_futbol_bp.route("/api/usuarios_futbol", methods=["GET"])

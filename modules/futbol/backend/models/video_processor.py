@@ -56,6 +56,14 @@ class VideoProcessor:
         if not cap.isOpened():
             return [], None
 
+        # Aplicar rotación EXIF automáticamente: vídeos de móvil llevan metadatos
+        # de orientación que el navegador respeta; sin esto, OpenCV procesaría los
+        # píxeles crudos y los landmarks/coords saldrían rotados respecto al preview.
+        try:
+            cap.set(cv2.CAP_PROP_ORIENTATION_AUTO, 1)
+        except Exception:
+            pass
+
         fps = cap.get(cv2.CAP_PROP_FPS)
         if fps is None or fps <= 0:
             fps = 30.0
@@ -63,17 +71,24 @@ class VideoProcessor:
         total = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
         ancho = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
         alto = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
-        info = InfoVideo(fps=fps, total_frames=total, ancho=ancho, alto=alto)
 
         landmarker = self._crear_landmarker()
         frames: list[FramePose] = []
         idx = 0
+        info = None
 
         try:
             while True:
                 ret, frame = cap.read()
                 if not ret:
                     break
+
+                # Tras CAP_PROP_ORIENTATION_AUTO el frame ya viene rotado, pero
+                # FRAME_WIDTH/HEIGHT pueden seguir reportando los valores crudos.
+                # Tomamos las dimensiones reales del primer frame.
+                if info is None:
+                    alto, ancho = frame.shape[:2]
+                    info = InfoVideo(fps=fps, total_frames=total, ancho=ancho, alto=alto)
 
                 frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
                 mp_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=frame_rgb)

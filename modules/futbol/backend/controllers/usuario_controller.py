@@ -26,6 +26,7 @@ from services.analitica_service import (
     ranking_mejores_sesiones,
 )
 from utils.serializers import serializar_row as _serializar
+from utils.validators import parse_altura_m, parse_peso_kg
 
 logger = logging.getLogger(__name__)
 
@@ -81,21 +82,17 @@ def crear():
         return jsonify({"error": "Campos obligatorios: alias, nombre_completo, altura_m"}), 400
 
     try:
-        altura = float(altura_str)
-        if not (0.50 <= altura <= 2.50):
-            return jsonify({"error": "altura_m debe estar entre 0.50 y 2.50 metros"}), 400
-    except (ValueError, TypeError):
-        return jsonify({"error": "altura_m debe ser un numero valido"}), 400
+        altura = parse_altura_m(altura_str)
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
 
     peso_kg = None
     peso_str = data.get("peso_kg")
     if peso_str is not None:
         try:
-            peso_kg = float(peso_str)
-            if not (20 <= peso_kg <= 300):
-                return jsonify({"error": "peso_kg debe estar entre 20 y 300 kg"}), 400
-        except (ValueError, TypeError):
-            return jsonify({"error": "peso_kg debe ser un numero valido"}), 400
+            peso_kg = parse_peso_kg(peso_str)
+        except ValueError as exc:
+            return jsonify({"error": str(exc)}), 400
 
     try:
         nuevo_id = _usuario_model.crear(alias, nombre, altura, peso_kg)
@@ -129,21 +126,17 @@ def actualizar(id_usuario: int):
         return jsonify({"error": "Campos obligatorios: alias, nombre_completo, altura_m"}), 400
 
     try:
-        altura = float(altura_str)
-        if not (0.50 <= altura <= 2.50):
-            return jsonify({"error": "altura_m debe estar entre 0.50 y 2.50 metros"}), 400
-    except (ValueError, TypeError):
-        return jsonify({"error": "altura_m debe ser un numero valido"}), 400
+        altura = parse_altura_m(altura_str)
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
 
     peso_kg = None
     peso_str = data.get("peso_kg")
     if peso_str is not None:
         try:
-            peso_kg = float(peso_str)
-            if not (20 <= peso_kg <= 300):
-                return jsonify({"error": "peso_kg debe estar entre 20 y 300 kg"}), 400
-        except (ValueError, TypeError):
-            return jsonify({"error": "peso_kg debe ser un numero valido"}), 400
+            peso_kg = parse_peso_kg(peso_str)
+        except ValueError as exc:
+            return jsonify({"error": str(exc)}), 400
 
     try:
         ok = _usuario_model.actualizar(id_usuario, alias, nombre, altura, peso_kg)
@@ -188,9 +181,13 @@ def _golpeos_usuario(id_usuario: int, orden: str = "DESC") -> list[dict]:
     return [_serializar(g) for g in golpeos]
 
 
+def _usuario_existe(id_usuario: int) -> bool:
+    return bool(_usuario_model.obtener_por_id(id_usuario))
+
+
 @usuarios_bp.route("/api/usuarios/<int:id_usuario>/fatiga", methods=["GET"])
 def fatiga_usuario(id_usuario: int):
-    if not _usuario_model.obtener_por_id(id_usuario):
+    if not _usuario_existe(id_usuario):
         return jsonify({"error": "Usuario no encontrado"}), 404
     metrica = (request.args.get("metrica") or "velocidad_pie_ms").strip()
     return jsonify(calcular_fatiga_intra_sesion(_golpeos_usuario(id_usuario, "ASC"), metrica=metrica))
@@ -198,7 +195,7 @@ def fatiga_usuario(id_usuario: int):
 
 @usuarios_bp.route("/api/usuarios/<int:id_usuario>/tendencia", methods=["GET"])
 def tendencia_usuario(id_usuario: int):
-    if not _usuario_model.obtener_por_id(id_usuario):
+    if not _usuario_existe(id_usuario):
         return jsonify({"error": "Usuario no encontrado"}), 404
     metrica = (request.args.get("metrica") or "velocidad_pie_ms").strip()
     try:
@@ -214,7 +211,7 @@ def tendencia_usuario(id_usuario: int):
 
 @usuarios_bp.route("/api/usuarios/<int:id_usuario>/comparativa", methods=["GET"])
 def comparativa_usuario(id_usuario: int):
-    if not _usuario_model.obtener_por_id(id_usuario):
+    if not _usuario_existe(id_usuario):
         return jsonify({"error": "Usuario no encontrado"}), 404
     try:
         n = int(request.args.get("n", "4"))
@@ -225,7 +222,7 @@ def comparativa_usuario(id_usuario: int):
 
 @usuarios_bp.route("/api/usuarios/<int:id_usuario>/alertas_tendencia", methods=["GET"])
 def alertas_tendencia_usuario(id_usuario: int):
-    if not _usuario_model.obtener_por_id(id_usuario):
+    if not _usuario_existe(id_usuario):
         return jsonify({"error": "Usuario no encontrado"}), 404
     golpeos = _golpeo_model.obtener_historial_analitica_usuario(id_usuario)
     from utils.serializers import serializar_row as _s
@@ -234,7 +231,7 @@ def alertas_tendencia_usuario(id_usuario: int):
 
 @usuarios_bp.route("/api/usuarios/<int:id_usuario>/analitica_avanzada", methods=["GET"])
 def analitica_avanzada_usuario(id_usuario: int):
-    if not _usuario_model.obtener_por_id(id_usuario):
+    if not _usuario_existe(id_usuario):
         return jsonify({"error": "Usuario no encontrado"}), 404
     metrica = (request.args.get("metrica") or "velocidad_pie_ms").strip()
     incluir_global = request.args.get("global", "0").strip() == "1"

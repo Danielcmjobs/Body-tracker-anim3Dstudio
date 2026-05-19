@@ -27,6 +27,7 @@ Script de arranque para todo el proyecto.
 | Servicio | Puerto | Descripción |
 |----------|--------|-------------|
 | Backend Salto | 5001 | `modules/salto/backend/app.py` — API de análisis de saltos |
+| Backend Futbol | 5002 | `modules/futbol/backend/app.py` — API de análisis de golpeo |
 | Backend Sensor | 5000 | `modules/sensor/backend/app.py` — API del sensor Arduino |
 | Frontend Web HTTPS | 8443 | `integration/web/` servido con `scripts/https_server.py` |
 
@@ -39,23 +40,6 @@ scripts\run_all.bat
 ```
 
 Después abrir `https://localhost:8443` en el navegador. Cerrar las ventanas de cmd para detener los servicios.
-
-## Modo HTTP (compatibilidad)
-
-Aunque el modo recomendado es HTTPS, se mantiene soporte de arranque manual del frontend en HTTP:
-
-```powershell
-cd integration\web
-python -m http.server 8080
-```
-
-Abrir:
-
-```text
-http://localhost:8080
-```
-
-Nota: los backends arrancan en HTTPS automáticamente si existen certificados en `certs/`. Para un entorno totalmente HTTP, arranca sin esos certificados.
 
 ## Acceso desde movil (LAN)
 
