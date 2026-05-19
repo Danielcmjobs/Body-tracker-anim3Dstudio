@@ -8,7 +8,7 @@
 
 let configGlobal = {
     ball_detector_mode: "heuristic",
-    ball_detector_enabled: false,
+    ball_detector_enabled: true,
     rgb_threshold: 35,
     motion_threshold: 12,
     frame_diff_threshold: 20,

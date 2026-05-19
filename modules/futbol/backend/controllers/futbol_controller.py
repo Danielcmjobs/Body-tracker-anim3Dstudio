@@ -33,14 +33,12 @@ from services.interpretacion_service import (
     clasificar_golpeo,
     generar_observaciones,
 )
-from services.ball_detector_service import BallDetectorService
 
 
 class FutbolController:
     def __init__(self) -> None:
         self.processor = VideoProcessor()
         self.calculo = CalculoService()
-        self.ball_detector = BallDetectorService()
 
     def procesar_golpeo(
         self,
@@ -124,18 +122,6 @@ class FutbolController:
         respuesta["clasificacion"] = clasif
         respuesta["observaciones"] = observ
         respuesta["score_compuesto"] = calcular_score_compuesto(respuesta)
-
-        # 9) Refinado opcional de trayectoria de balon por ML (offline)
-        if usar_ml_balon:
-            try:
-                respuesta["balon_ml"] = self.ball_detector.detectar_trayectoria(ruta_video)
-            except Exception as exc:
-                respuesta["balon_ml"] = {
-                    "enabled": False,
-                    "status": "error",
-                    "reason": f"Fallo en postproceso ML: {exc}",
-                    "trayectoria": [],
-                }
 
         if incluir_landmarks:
             respuesta["landmarks_frames"] = landmarks_frames

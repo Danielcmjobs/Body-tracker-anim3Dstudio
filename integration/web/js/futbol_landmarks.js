@@ -7,7 +7,7 @@ import {
 // === Configuracion dinamica (importada desde config_balon.js) ===
 let configDinamica = {
     ball_detector_mode: "heuristic",
-    ball_detector_enabled: false,
+    ball_detector_enabled: true,
     rgb_threshold: 35,
     motion_threshold: 12,
     frame_diff_threshold: 20,
@@ -102,12 +102,9 @@ function registrarSemillaManual(elemento, asignarSemilla) {
     });
 }
 
-registrarSemillaManual(videoLive, function (seed) {
-    manualBallSeedLive = seed;
-});
-registrarSemillaManual(previewVideo, function (seed) {
-    manualBallSeedPreview = seed;
-});
+// Detección manual/automática de balón desactivada por solicitud de producto.
+manualBallSeedLive = null;
+manualBallSeedPreview = null;
 
 function crearEstadoBalon() {
     return {
@@ -125,7 +122,9 @@ function crearEstadoBalon() {
         framesSinDeteccion: 0,
         // Frame-budget adaptativo (ms): si una detección tarda demasiado, saltamos el siguiente.
         lastBallMs: 0,
-        saltarSiguiente: false
+        saltarSiguiente: false,
+        // Color del balón muestreado en el tap del usuario (R,G,B en 0..255). Persistente.
+        ballColor: null
     };
 }
 
@@ -239,6 +238,59 @@ function obtenerCentroPies(landmarks, ancho, alto) {
     };
 }
 
+// Devuelve los landmarks corporales que el balón NUNCA debería confundirse con
+// (torso, brazos, cabeza). Los pies/tobillos NO se enmascaran porque el balón
+// suele estar muy cerca de ellos en el momento del golpeo.
+const LANDMARK_IDS_CUERPO_MASK = [
+    0, 1, 2, 3, 4, 5, 6, 7, 8,   // cara
+    9, 10,                        // boca
+    11, 12, 13, 14, 15, 16,       // hombros, codos, muñecas
+    17, 18, 19, 20, 21, 22,       // manos
+    23, 24,                       // caderas
+    25, 26                        // rodillas
+];
+
+function obtenerPuntosMascara(landmarks, ancho, alto) {
+    if (!Array.isArray(landmarks) || landmarks.length < 33) {
+        return null;
+    }
+    const puntos = [];
+    for (const id of LANDMARK_IDS_CUERPO_MASK) {
+        const lm = landmarks[id];
+        if (lm && (lm.visibility === undefined || lm.visibility > 0.3)) {
+            puntos.push({ x: lm.x * ancho, y: lm.y * alto });
+        }
+    }
+    return puntos.length ? puntos : null;
+}
+
+function distanciaCuadrada(ax, ay, bx, by) {
+    const dx = ax - bx;
+    const dy = ay - by;
+    return dx * dx + dy * dy;
+}
+
+// Muestrea el color medio en un parche cuadrado alrededor de (cx,cy) sobre data RGBA.
+function muestrearColor(data, width, height, cx, cy, radio) {
+    const x0 = Math.max(0, Math.floor(cx - radio));
+    const x1 = Math.min(width - 1, Math.ceil(cx + radio));
+    const y0 = Math.max(0, Math.floor(cy - radio));
+    const y1 = Math.min(height - 1, Math.ceil(cy + radio));
+    let sr = 0, sg = 0, sb = 0, n = 0;
+    for (let y = y0; y <= y1; y += 1) {
+        const row = y * width;
+        for (let x = x0; x <= x1; x += 1) {
+            const idx = (row + x) * 4;
+            sr += data[idx];
+            sg += data[idx + 1];
+            sb += data[idx + 2];
+            n += 1;
+        }
+    }
+    if (!n) return null;
+    return [sr / n, sg / n, sb / n];
+}
+
 // Marca el tiempo gastado y decide si conviene saltar el siguiente frame.
 function marcarTiempoBalon(estado, tInicio) {
     if (!tInicio || typeof performance === 'undefined' || !performance.now) {
@@ -313,15 +365,39 @@ function detectarBalon(video, landmarks, estado, salidaAncho, salidaAlto, manual
         return null;
     }
 
-    // Si hay semilla manual, usarla como detección inicial y resetear tras usar
+    // Si hay semilla manual, usarla como detección inicial y MUESTREAR el color del balón.
+    // El color persiste en estado.ballColor y se usa como base del tracking posterior.
     if (manualSeed && typeof manualSeed.nx === 'number' && typeof manualSeed.ny === 'number') {
         // Convertir coordenadas normalizadas a la escala interna y de salida
         const escala = scaleBase / videoW;
         const targetW = Math.max(120, Math.round(videoW * escala));
         const targetH = Math.max(90, Math.round(videoH * escala));
+
+        // Asegurar buffer offscreen con el tamaño correcto para muestrear color del frame actual.
+        if (estado.ancho !== targetW || estado.alto !== targetH) {
+            estado.offscreen.width = targetW;
+            estado.offscreen.height = targetH;
+            estado.ancho = targetW;
+            estado.alto = targetH;
+            estado.ctx = estado.offscreen.getContext("2d", { willReadFrequently: true });
+            estado.prev = null;
+        }
         const xRaw = manualSeed.nx * targetW;
         const yRaw = manualSeed.ny * targetH;
         const radio = Math.max(8, Math.round(targetW * 0.04));
+
+        // Muestrear el color del balón en un parche pequeño alrededor del tap.
+        if (estado.ctx) {
+            estado.ctx.drawImage(video, 0, 0, targetW, targetH);
+            const imgData = estado.ctx.getImageData(0, 0, targetW, targetH);
+            const color = muestrearColor(imgData.data, targetW, targetH, xRaw, yRaw, Math.max(3, Math.round(radio * 0.6)));
+            if (color) {
+                estado.ballColor = color;
+            }
+            // Forzar refresco del frame previo para que el siguiente diff no genere ruido espurio.
+            estado.prev = imgData;
+        }
+
         estado.ultimaDeteccion = {
             xRaw,
             yRaw,
@@ -335,6 +411,9 @@ function detectarBalon(video, landmarks, estado, salidaAncho, salidaAlto, manual
             yRaw,
             ttl: 8
         };
+        estado.framesSinDeteccion = 0;
+        estado.vx = 0;
+        estado.vy = 0;
         // Limpiar semilla tras usarla
         if (video === videoLive) manualBallSeedLive = null;
         if (video === previewVideo) manualBallSeedPreview = null;
@@ -428,21 +507,65 @@ function detectarBalon(video, landmarks, estado, salidaAncho, salidaAlto, manual
     };
 
     // Centroide ponderado por intensidad de movimiento (subpíxel, sin coste extra).
+    // Si tenemos color del balón muestreado, scoreamos por similitud de color en lugar de
+    // únicamente por movimiento — el balón se trackea aunque esté quieto y el cuerpo no
+    // arrastra el centroide aunque se mueva mucho.
+    const hayColor = Array.isArray(estado.ballColor);
+    const colorR = hayColor ? estado.ballColor[0] : 0;
+    const colorG = hayColor ? estado.ballColor[1] : 0;
+    const colorB = hayColor ? estado.ballColor[2] : 0;
+    // Umbral de distancia euclídea RGB para considerar un pixel "parecido al balón".
+    const colorDistMax = 70;
+    const colorDistMax2 = colorDistMax * colorDistMax;
+
+    // Máscara de landmarks corporales (torso/brazos/cabeza/rodillas) para excluir
+    // su entorno del scoring. Los pies se dejan fuera de la máscara.
+    const puntosMascara = obtenerPuntosMascara(landmarks, targetW, targetH);
+    const radioMascara = Math.max(8, Math.round(targetW * 0.05));
+    const radioMascara2 = radioMascara * radioMascara;
+
     for (let y = roi.minY; y <= roi.maxY; y += 1) {
         const rowBase = y * targetW;
+        // Pre-check: ¿esta fila pasa cerca de algún landmark corporal?
+        // Optimización: si todos los puntos están lejos en Y, podemos saltar más rápido.
         for (let x = roi.minX; x <= roi.maxX; x += 1) {
-            const idx = (rowBase + x) * 4;
-            const dr = data[idx] - prev[idx];
-            const dg = data[idx + 1] - prev[idx + 1];
-            const db = data[idx + 2] - prev[idx + 2];
-            const ar = dr < 0 ? -dr : dr;
-            const ag = dg < 0 ? -dg : dg;
-            const ab = db < 0 ? -db : db;
-            const diff = (ar + ag + ab) / 3;
-            if (diff <= threshold) {
-                continue;
+            // Enmascarar pixeles cercanos a landmarks corporales (no a pies).
+            if (puntosMascara) {
+                let masked = false;
+                for (let k = 0; k < puntosMascara.length; k += 1) {
+                    if (distanciaCuadrada(x, y, puntosMascara[k].x, puntosMascara[k].y) < radioMascara2) {
+                        masked = true;
+                        break;
+                    }
+                }
+                if (masked) continue;
             }
-            const w = diff;
+
+            const idx = (rowBase + x) * 4;
+            let w;
+            if (hayColor) {
+                const dr = data[idx] - colorR;
+                const dg = data[idx + 1] - colorG;
+                const db = data[idx + 2] - colorB;
+                const dist2 = dr * dr + dg * dg + db * db;
+                if (dist2 > colorDistMax2) {
+                    continue;
+                }
+                // Peso inversamente proporcional a la distancia de color (más parecido => más peso).
+                w = colorDistMax2 - dist2;
+            } else {
+                const dr = data[idx] - prev[idx];
+                const dg = data[idx + 1] - prev[idx + 1];
+                const db = data[idx + 2] - prev[idx + 2];
+                const ar = dr < 0 ? -dr : dr;
+                const ag = dg < 0 ? -dg : dg;
+                const ab = db < 0 ? -db : db;
+                const diff = (ar + ag + ab) / 3;
+                if (diff <= threshold) {
+                    continue;
+                }
+                w = diff;
+            }
             sumX += x * w;
             sumY += y * w;
             sumW += w;
@@ -467,7 +590,9 @@ function detectarBalon(video, landmarks, estado, salidaAncho, salidaAlto, manual
     }
 
     const roiArea = Math.max(1, (roi.maxX - roi.minX + 1) * (roi.maxY - roi.minY + 1));
-    if (count > roiArea * 0.45) {
+    // Cuando trackeamos por color, el cuerpo ya está enmascarado, así que no aplicamos
+    // esta guardia (que en color tracking sería falsa alarma si el balón ocupa mucho).
+    if (!hayColor && count > roiArea * 0.45) {
         // Evita tomar movimiento global del cuerpo/fondo como balón.
         if (estado.manualSeed && estado.manualSeed.ttl > 0) {
             estado.manualSeed.ttl -= 1;
@@ -482,7 +607,9 @@ function detectarBalon(video, landmarks, estado, salidaAncho, salidaAlto, manual
     let cy = sumY / sumW;
     let radio = Math.max(6, Math.sqrt(count / Math.PI));
 
-    if (pies) {
+    // El filtro de "demasiado lejos de los pies" solo aplica en modo motion (sin color).
+    // Con color tracking, el balón puede estar lejos del jugador tras el chute.
+    if (!hayColor && pies) {
         const dist = Math.hypot(cx - pies.x, cy - pies.y);
         const factorDist = estado.ultimaDeteccion ? 1.5 : 0.9;
         const maxDist = Math.max(25, (centroBusqueda === pies ? distBusqueda : targetW * 0.35) * factorDist);
@@ -622,18 +749,6 @@ async function renderLiveLoop() {
         if (pose) {
             drawPose(ctxLive, pose);
         }
-
-        const balon = detectarBalon(
-            videoLive,
-            pose,
-            ballStateLive,
-            canvasLive.width,
-            canvasLive.height,
-            manualBallSeedLive
-        );
-        if (balon) {
-            drawBall(ctxLive, balon);
-        }
     }
 
     scheduleVideoFrame(videoLive, renderLiveLoop);
@@ -667,18 +782,6 @@ async function renderPreviewLoop() {
         const pose = results.landmarks && results.landmarks[0];
         if (pose) {
             drawPose(previewCtx, pose);
-        }
-
-        const balon = detectarBalon(
-            previewVideo,
-            pose,
-            ballStatePreview,
-            previewCanvas.width,
-            previewCanvas.height,
-            manualBallSeedPreview
-        );
-        if (balon) {
-            drawBall(previewCtx, balon);
         }
     }
 
@@ -725,17 +828,6 @@ function mostrarPreview(videoBlob) {
 function resetPreview() {
     previewLoopActivo = false;
     lastPreviewTime = -1;
-    // H3: reset completo del estado del balon en preview.
-    ballStatePreview.prev = null;
-    ballStatePreview.ultimaDeteccion = null;
-    ballStatePreview.frameCount = 0;
-    ballStatePreview.manualSeed = null;
-    ballStatePreview.vx = 0;
-    ballStatePreview.vy = 0;
-    ballStatePreview.framesSinDeteccion = 0;
-    ballStatePreview.lastBallMs = 0;
-    ballStatePreview.saltarSiguiente = false;
-    manualBallSeedPreview = null;
 
     if (previewVideo) {
         try { previewVideo.pause(); } catch (_e) { /* ignore */ }

@@ -13,7 +13,7 @@ Este índice separa documentación vigente de documentación histórica para evi
 | [fases_proyecto.md](fases_proyecto.md) | Estado funcional y avance por fases |
 | [futbol.md](futbol.md) | Referencia funcional del módulo fútbol |
 | [checklist_validacion_salto_vh_realtime_galeria.md](checklist_validacion_salto_vh_realtime_galeria.md) | Validación funcional de flujos críticos |
-| [../DOCUMENTACION_CONFIG_REALTIME_BALON.md](../DOCUMENTACION_CONFIG_REALTIME_BALON.md) | Estado consolidado de configuración realtime y refactor reciente |
+| [../DOCUMENTACION_CONFIG_REALTIME_BALON.md](../DOCUMENTACION_CONFIG_REALTIME_BALON.md) | Estado del módulo fútbol: pipeline landmark-only, código durmiente de detección de balón |
 | [../modules/futbol/ANALITICA_AVANZADA.md](../modules/futbol/ANALITICA_AVANZADA.md) | Referencia de analítica avanzada del módulo fútbol |
 
 ## Documentación Histórica (Referencia)

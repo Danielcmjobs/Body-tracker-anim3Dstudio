@@ -15,7 +15,7 @@ from threading import Lock
 # como valor descriptivo/compatibilidad, no como selector operativo en el overlay.
 SETTINGS_DEFAULTS = {
     "ball_detector_mode": "heuristic",
-    "ball_detector_enabled": False,
+    "ball_detector_enabled": True,
     "rgb_threshold": 35,
     "motion_threshold": 12,
     "frame_diff_threshold": 20,

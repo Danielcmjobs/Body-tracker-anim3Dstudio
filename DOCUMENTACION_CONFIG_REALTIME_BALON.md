@@ -1,12 +1,14 @@
 # Módulo Fútbol — Documentación Operativa Consolidada
 
+> **Actualización 2026-05-19:** La detección de balón ha sido completamente eliminada del pipeline activo. El análisis es 100 % basado en landmarks corporales (MediaPipe). El servicio `ball_detector_service.py` y el panel `config_balon.js` siguen presentes en el código pero están inactivos (código durmiente).
+
 ## 1. Alcance
 Documento único del estado actual del módulo de fútbol:
 
-- Configuración en tiempo real de detección de balón.
 - Arquitectura funcional frontend–backend.
 - Flujo operativo único por HTTPS.
 - Refactor y endurecimiento aplicados en backend.
+- Estado del código de detección de balón (durmiente).
 - Riesgos actuales y evolución recomendada.
 
 ---
@@ -15,40 +17,48 @@ Documento único del estado actual del módulo de fútbol:
 
 ### 2.1 Operativo
 - API de fútbol: análisis, usuarios, analítica avanzada y configuración dinámica.
-- Frontend con panel de parámetros aplicados en caliente y sincronizados con la respuesta autoritativa del servidor.
-- Detección en vivo optimizada para móvil, con semilla manual opcional por toque.
+- Pipeline de análisis 100 % basado en landmarks corporales (MediaPipe Pose Landmarker, 33 landmarks).
+- Frame de impacto detectado por pico de velocidad del tobillo; todos los ángulos y métricas derivados de articulaciones corporales.
 
-### 2.2 Decisión de rendimiento
-La detección visual por clustering en vivo está desactivada para evitar congelamientos en móvil. En tiempo real se prioriza la detección por movimiento (diferencia de frames con umbral adaptativo).
+### 2.2 Estado de la detección de balón
+La detección de balón ha sido **completamente eliminada** del pipeline activo (2026-05-19):
 
-Resultado:
-- Mayor fluidez en tiempo real.
-- Menor sensibilidad a balón completamente estático (mitigado con semilla manual).
+- Los loops de render (`renderLiveLoop`, `renderPreviewLoop`) en `futbol_landmarks.js` solo llaman a `drawPose()`. No hay llamadas a `detectarBalon` ni `drawBall`.
+- El controlador `futbol_controller.py` no importa `BallDetectorService`. Los pasos 9-10 (balon_ml, balon_trayectoria) han sido eliminados. Solo existen los pasos 1-8 (landmark-based).
+- Los listeners de tap-to-seed (`touchstart`/`mousedown`) han sido eliminados de `futbol_landmarks.js`.
+- La API pública `window.futbolLandmarksPreview` ya no expone `setBallTrajectory`.
+- El overlay de círculo naranja no aparece ni en el stream en vivo ni en la previsualización.
+
+Código durmiente (existe pero no se invoca):
+- `ball_detector_service.py` — métodos `detectar_trayectoria` y `detectar_trayectoria_heuristica` presentes pero sin llamante.
+- Funciones `detectarBalon`, `drawBall`, `crearEstadoBalon` en `futbol_landmarks.js` — definidas pero no llamadas.
+- Panel `config_balon.js` — sigue cargando y llama a `actualizarConfiguracionEnVivo` (función aún definida), pero no tiene efecto real sobre el análisis.
+- Endpoint `/api/futbol/config` y `settings_service.py` — operativos pero sus parámetros de balón no influyen en ninguna ejecución.
 
 ---
 
 ## 3. Arquitectura Funcional
 
 ```text
-[Panel de configuración]
+[Video (móvil o galería)]
+      ↓ POST /api/futbol/analizar
+[modules/futbol/backend/controllers/futbol_controller.py]
       ↓
-[integration/web/js/config_balon.js]
-      ↓ REST (HTTPS)
-[modules/futbol/backend/app.py -> /api/futbol/config]
+[models/video_processor.py]   (landmarks por frame, OpenCV + MediaPipe)
       ↓
-[modules/futbol/backend/services/settings_service.py]
-      ↑
-[integration/web/js/futbol_landmarks.js]   (lee config + semilla manual)
-      ↑
-[modules/futbol/backend/services/ball_detector_service.py]   (offline, releé settings)
+[services/impacto_service.py]      (frame de impacto, velocidad pie)
+[services/cinematico_service.py]   (curvas angulares, fases, velocidades articulares)
+[services/apoyo_service.py]        (estabilidad tronco/apoyo, asimetría)
+[services/interpretacion_service.py] (alertas, clasificación, observaciones)
+      ↓ JSON
+[integration/web/js/futbol.js]     (muestra métricas + activa preview overlay)
+[integration/web/js/futbol_landmarks.js]  (overlay esqueleto en live y preview)
 ```
 
 Responsabilidad por capa:
-- Panel: captura cambios de usuario.
-- API: valida, sanitiza y persiste parámetros.
-- Servicio de settings: estado en memoria thread-safe + persistencia JSON.
-- Overlay: aplica cambios al siguiente frame.
-- Detector ML offline: relee `ball_detector_mode`, `confidence_threshold` e `iou_threshold` en cada ejecución.
+- Backend: extrae landmarks con MediaPipe vía VideoProcessor, ejecuta pipeline de 8 pasos, devuelve métricas en JSON.
+- Frontend: recibe JSON y renderiza paneles, gráficas Chart.js, visor 3D y overlay de esqueleto (canvas sobre `<video>`).
+- `config_balon.js` / `settings_service.py`: siguen operativos (durmientes) pero sus parámetros no afectan ningún cálculo activo.
 
 ---
 
@@ -118,10 +128,14 @@ Acciones:
 
 Archivo: `integration/web/js/futbol_landmarks.js`
 
-Acciones:
-- Relee parámetros dinámicos (`configDinamica`).
-- Registra semilla manual por toque (`touchstart`/`mousedown`) sobre los elementos `<video>` (no sobre el canvas), usando coordenadas normalizadas `0..1`.
-- Aplica la semilla como ancla del ROI durante un TTL acotado (por defecto 8 frames). El TTL decrementa en todas las ramas de procesamiento.
+Acciones activas:
+- Loop `renderLiveLoop`: detecta pose con MediaPipe y dibuja esqueleto en canvas sobre `#vista-camara`.
+- Loop `renderPreviewLoop`: detecta pose con MediaPipe y dibuja esqueleto en canvas sobre `#preview-video`.
+- API pública `window.futbolLandmarksPreview`: expone `setVideoBlob`, `set3DFrames`, `reset`. Sin `setBallTrajectory`.
+
+Código durmiente (definido, no llamado):
+- Funciones `detectarBalon`, `drawBall`, `crearEstadoBalon`, `actualizarConfiguracionEnVivo`.
+- Variables `manualBallSeedLive`, `manualBallSeedPreview`, `ballStateLive`, `ballStatePreview` (inicializadas a `null`, sin listeners activos).
 
 ---
 
@@ -203,17 +217,18 @@ Consumidores:
 - `integration/web/js/config_balon.js` — usa `datos.settings` del servidor como autoridad; notifica al overlay también en la carga inicial.
 - `integration/web/futbol.html` — eliminado el selector engañoso de `ball_detector_mode` en vivo (la detección en tiempo real es heurística por diseño).
 
-### 7.3 Detector ML offline dinámico
-- `services/ball_detector_service.py` — `ball_detector_mode`, `confidence_threshold` e `iou_threshold` se releen desde `settings_service` en cada `detectar_trayectoria`. Las variables de entorno `BALL_DETECTOR_*` se mantienen como fallback.
+### 7.3 Detector ML offline *(durmiente)*
+- `services/ball_detector_service.py` — el servicio existe con métodos `detectar_trayectoria` (YOLO) y `detectar_trayectoria_heuristica`. Ninguno es llamado: `futbol_controller.py` no importa ni instancia `BallDetectorService`. Los pasos 9-10 del pipeline han sido eliminados.
 
 ### 7.4 Estabilidad y recursos
 - `models/db.py` — inicialización del pool MySQL thread-safe (`Lock` + double-check).
 - `app.py` — limpieza de uploads tras `analizar_golpeo` y `video-anotado` (los archivos temporales ya no se acumulan en disco).
 - Manejo uniforme de excepciones con `logger.exception` en controladores.
 
-### 7.5 Selección manual de balón
-- `futbol_landmarks.js` — `touchstart`/`mousedown` sobre los `<video>` (no canvas), coordenadas `0..1`, guardas para `videoWidth=0`, TTL del seed decrementa en todas las ramas.
-- `css/salto.css` y `css/videos.css` — `touch-action: none` sobre `#vista-camara` y `.preview-video` para evitar scroll/zoom del navegador durante la captura.
+### 7.5 Selección manual de balón *(eliminado)*
+- Los listeners `touchstart`/`mousedown` sobre los `<video>` han sido eliminados de `futbol_landmarks.js`.
+- Las variables `manualBallSeedLive` / `manualBallSeedPreview` quedan inicializadas a `null` sin listeners.
+- El atributo CSS `touch-action: none` sobre `#vista-camara` y `.preview-video` se mantiene (neutro, no perjudica).
 
 ### 7.6 Garantías
 - Sin cambios de rutas API.
@@ -224,47 +239,25 @@ Consumidores:
 
 ## 8. Riesgos y Mitigaciones
 
-1. Balón estático en vivo
-   - Riesgo: sensibilidad reducida con detección por movimiento.
-   - Mitigación: semilla manual por toque + heurística adaptativa por ROI.
-
-2. Dependencia SSL local
+1. Dependencia SSL local
    - Riesgo: backend no inicia sin certificados.
    - Mitigación: generar con `scripts/generate_cert.py`.
 
-3. Ajuste agresivo de parámetros
-   - Riesgo: pérdida de precisión en detección.
-   - Mitigación: rangos validados en backend + UI con sliders acotados.
-
-4. Persistencia de configuración
+2. Persistencia de configuración
    - Riesgo: `config_dynamic.json` corrupto bloquearía carga.
    - Mitigación: `cargar_settings` captura excepciones y mantiene defaults.
 
-5. Modo `yolo_onnx` activo sin modelo
-   - Riesgo: el detector responde con `status:"disabled"` y trayectoria vacía.
-   - Mitigación: `enabled()` valida existencia del modelo antes de inicializar la red.
+3. Código durmiente de detección de balón
+   - Riesgo: reactivación accidental si alguien añade una llamada a `detectarBalon` o importa `BallDetectorService` sin contexto.
+   - Mitigación: el código está inerte en la rama activa; si se requiere en el futuro, activar de forma explícita y validar con YOLO ONNX (ya scaffoldeado, necesita fichero de modelo + variable de entorno `BALL_DETECTOR_MODE=yolo_onnx`).
 
 ---
 
-## 9. Selección manual como semilla para tracking automático
+## 9. Selección manual de balón *(eliminada — referencia histórica)*
 
-Flujo híbrido en tiempo real:
+Esta funcionalidad fue implementada y posteriormente eliminada (2026-05-19) junto con toda la detección de balón del pipeline activo.
 
-- **Si el usuario toca el `<video>` de captura o vista previa,** el sistema registra la coordenada normalizada y la usa como semilla inicial del tracking.
-- **Si no se detecta ningún toque,** se mantiene el flujo automático heurístico actual.
-- Una vez fijada la posición inicial (manual o automática), el ROI de búsqueda se ancla a esa zona durante un TTL acotado (8 frames) y luego sigue el flujo normal.
-- Si el tracker pierde el balón, vuelve al flujo automático; un nuevo toque permite re-sembrar.
-
-Implementación real:
-- Listeners en `videoLive` (`#vista-camara`) y `previewVideo` (`#preview-video`) en `integration/web/js/futbol_landmarks.js`.
-- Coordenadas almacenadas como `{nx, ny}` en `0..1` para evitar desajustes por escalado responsive.
-- TTL gestionado por `estado.manualSeed.ttl` y decrementado en todas las ramas de procesamiento.
-- CSS `touch-action: none` evita conflictos con gestos del navegador.
-
-Ventajas:
-- Sin modo manual explícito: el toque es la activación.
-- Robusto ante balón estático o parcialmente oculto.
-- No rompe arquitectura ni contratos.
+Contexto: la detección heurística por diferencia de frames (motion-diff) es incompatible con cámara de móvil en mano, ya que el movimiento del propio cámara genera falsos positivos en toda la imagen. La semilla manual no resolvía el problema raíz. La detección fiable requiere YOLO ONNX con un modelo entrenado en balón de fútbol, que sigue scaffoldeado en `ball_detector_service.py` para activación futura.
 
 ---
 

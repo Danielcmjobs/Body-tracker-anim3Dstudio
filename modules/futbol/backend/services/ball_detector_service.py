@@ -98,6 +98,13 @@ class BallDetectorService:
                 "trayectoria": [],
             }
 
+        # Respetar la rotación EXIF (igual que el navegador) para que las coords
+        # del balón estén en el mismo sistema que el preview del frontend.
+        try:
+            cap.set(cv2.CAP_PROP_ORIENTATION_AUTO, 1)
+        except Exception:
+            pass
+
         fps = cap.get(cv2.CAP_PROP_FPS)
         fps = fps if fps and fps > 0 else 30.0
         width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH) or 0)
@@ -115,6 +122,10 @@ class BallDetectorService:
                     break
                 if frame_idx >= BALL_DETECTOR_MAX_FRAMES:
                     break
+
+                # Dimensiones reales (post-rotación) del primer frame.
+                if frame_idx == 0:
+                    height, width = frame.shape[:2]
 
                 det = self._detectar_en_frame(frame, frame_idx, fps, width, height, conf_th, iou_th)
                 if det is not None:
@@ -266,3 +277,136 @@ class BallDetectorService:
 
             boxes.append([x, y, bw, bh])
             scores.append(conf)
+
+    # ───────────────────────────────────────────────────────────────────────────
+    # Detector heuristico de trayectoria sin modelo ML.
+    # Usa diferencia de frames + enmascarado del cuerpo a partir de los landmarks
+    # ya extraidos por MediaPipe (no se duplica el coste de pose).
+    # Devuelve la trayectoria del balon en coords NORMALIZADAS [0..1] para que el
+    # frontend la dibuje sobre el video con cualquier resolucion.
+    # ───────────────────────────────────────────────────────────────────────────
+    # IDs de landmarks que se enmascaran (torso, brazos, cabeza, caderas, rodillas).
+    # Los pies/tobillos (27, 28, 29, 30, 31, 32) se dejan libres porque el balon
+    # esta justo a su lado en el momento del golpeo.
+    _MASK_LANDMARK_IDS = list(range(0, 27))
+
+    def detectar_trayectoria_heuristica(self, ruta_video: str, frames: list) -> dict:
+        """
+        Detecta la trayectoria del balon en un video ya analizado.
+        `frames` es la lista de FramePose devuelta por VideoProcessor (con landmarks
+        normalizados 0..1). Se usa para enmascarar el cuerpo.
+        """
+        cap = cv2.VideoCapture(ruta_video)
+        if not cap.isOpened():
+            return {
+                "enabled": True,
+                "mode": "heuristic",
+                "status": "error",
+                "reason": "No se pudo abrir el video",
+                "trayectoria": [],
+            }
+
+        # Aplicar rotación EXIF (mismo sistema de coords que el preview del navegador).
+        try:
+            cap.set(cv2.CAP_PROP_ORIENTATION_AUTO, 1)
+        except Exception:
+            pass
+
+        fps = cap.get(cv2.CAP_PROP_FPS)
+        fps = fps if fps and fps > 0 else 30.0
+
+        # Las dimensiones reales se toman del primer frame leído (post-rotación EXIF).
+        proc_w = 240
+        proc_h = 0
+        mask_radius = 0
+        width = 0
+        height = 0
+
+        # Indexar landmarks por frame_idx para lookup O(1).
+        landmarks_por_idx: dict[int, list[dict]] = {}
+        for fp in frames or []:
+            if getattr(fp, "landmarks", None):
+                landmarks_por_idx[fp.frame_idx] = fp.landmarks
+
+        trayectoria: list[dict] = []
+        prev_gray = None
+        idx = 0
+        max_frames = BALL_DETECTOR_MAX_FRAMES
+
+        try:
+            while True:
+                ok, frame = cap.read()
+                if not ok:
+                    break
+                if idx >= max_frames:
+                    break
+
+                if proc_h == 0:
+                    height, width = frame.shape[:2]
+                    if width <= 0 or height <= 0:
+                        break
+                    proc_h = max(90, int(round(height * proc_w / width)))
+                    mask_radius = max(6, int(proc_w * 0.07))
+
+                small = cv2.resize(frame, (proc_w, proc_h), interpolation=cv2.INTER_AREA)
+                gray = cv2.cvtColor(small, cv2.COLOR_BGR2GRAY)
+                gray = cv2.GaussianBlur(gray, (5, 5), 0)
+
+                if prev_gray is not None:
+                    diff = cv2.absdiff(gray, prev_gray)
+                    _, thresh = cv2.threshold(diff, 18, 255, cv2.THRESH_BINARY)
+
+                    # Enmascarar el cuerpo segun los landmarks de MediaPipe.
+                    lms = landmarks_por_idx.get(idx)
+                    if lms:
+                        for lid in self._MASK_LANDMARK_IDS:
+                            if lid < len(lms):
+                                lm = lms[lid]
+                                if lm.get("visibility", 1.0) > 0.3:
+                                    cx = int(lm.get("x", 0) * proc_w)
+                                    cy = int(lm.get("y", 0) * proc_h)
+                                    cv2.circle(thresh, (cx, cy), mask_radius, 0, -1)
+
+                    # Componentes conectados → buscar el mejor candidato (compacto, no demasiado grande).
+                    num, _labels, stats, centroids = cv2.connectedComponentsWithStats(thresh, connectivity=8)
+                    mejor = None  # (area, cx, cy, r)
+                    area_max = proc_w * proc_h * 0.04
+                    for i in range(1, num):
+                        area = int(stats[i, cv2.CC_STAT_AREA])
+                        w_blob = int(stats[i, cv2.CC_STAT_WIDTH])
+                        h_blob = int(stats[i, cv2.CC_STAT_HEIGHT])
+                        if area < 10 or area > area_max:
+                            continue
+                        if w_blob <= 1 or h_blob <= 1:
+                            continue
+                        aspect = max(w_blob, h_blob) / max(1, min(w_blob, h_blob))
+                        if aspect > 3.0:  # los balones son aprox redondos
+                            continue
+                        if mejor is None or area > mejor[0]:
+                            cx_b, cy_b = centroids[i]
+                            r_b = max(w_blob, h_blob) / 2.0
+                            mejor = (area, float(cx_b), float(cy_b), float(r_b))
+
+                    if mejor is not None:
+                        _, cx_b, cy_b, r_b = mejor
+                        trayectoria.append({
+                            "frame_idx": idx,
+                            "timestamp_s": round(idx / fps, 4),
+                            "x_norm": round(cx_b / proc_w, 4),
+                            "y_norm": round(cy_b / proc_h, 4),
+                            "r_norm": round(r_b / proc_w, 4),
+                        })
+
+                prev_gray = gray
+                idx += 1
+        finally:
+            cap.release()
+
+        return {
+            "enabled": True,
+            "mode": "heuristic",
+            "status": "ok",
+            "frames_procesados": idx,
+            "detecciones": len(trayectoria),
+            "trayectoria": trayectoria,
+        }

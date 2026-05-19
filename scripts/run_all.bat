@@ -80,17 +80,22 @@ echo.
 echo  === Jump Tracker - Iniciando servicios ===
 echo.
 
+REM ── CORS abierto en desarrollo (permite acceso desde movil en LAN) ──
+set CORS_ORIGINS=*
+echo  CORS_ORIGINS=*  ^(modo desarrollo: cualquier origen permitido^)
+echo.
+
 REM 1) Backend del salto (puerto 5001)
 echo  [1/4] Backend Salto (puerto 5001)...
-start "Backend Salto" cmd /k "cd /d %PROJECT_ROOT%\modules\salto\backend && set CORS_ORIGINS=https://localhost:8443,https://127.0.0.1:8443 && "%VENV_PYTHON%" app.py"
+start "Backend Salto" cmd /k "cd /d %PROJECT_ROOT%\modules\salto\backend && set CORS_ORIGINS=%CORS_ORIGINS% && "%VENV_PYTHON%" app.py"
 
 REM 2) Backend del futbol (puerto 5002)
 echo  [2/4] Backend Futbol (puerto 5002)...
-start "Backend Futbol" cmd /k "cd /d %PROJECT_ROOT%\modules\futbol\backend && set CORS_ORIGINS=https://localhost:8443,https://127.0.0.1:8443 && "%VENV_PYTHON%" app.py"
+start "Backend Futbol" cmd /k "cd /d %PROJECT_ROOT%\modules\futbol\backend && set CORS_ORIGINS=%CORS_ORIGINS% && "%VENV_PYTHON%" app.py"
 
 REM 3) Backend del sensor (puerto 5000) — no falla si no hay Arduino
 echo  [3/4] Backend Sensor (puerto 5000)...
-start "Backend Sensor" cmd /k "cd /d %PROJECT_ROOT%\modules\sensor\backend && set CORS_ORIGINS=https://localhost:8443,https://127.0.0.1:8443 && "%VENV_PYTHON%" app.py"
+start "Backend Sensor" cmd /k "cd /d %PROJECT_ROOT%\modules\sensor\backend && set CORS_ORIGINS=%CORS_ORIGINS% && "%VENV_PYTHON%" app.py"
 
 REM 4) Frontend web HTTPS (puerto 8443)
 echo  [4/4] Frontend web HTTPS (puerto 8443)...

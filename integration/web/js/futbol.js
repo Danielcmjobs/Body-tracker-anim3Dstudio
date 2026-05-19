@@ -441,6 +441,11 @@ document.addEventListener('DOMContentLoaded', () => {
             }
             ultimoVideoBlob = videoNormalizado;
             pintarResultados(resultado, videoNormalizado);
+            // Lleva al usuario al panel de resultados para que vea las metricas calculadas.
+            const panelMetricas = document.getElementById('futbol-metricas');
+            if (panelMetricas && typeof panelMetricas.scrollIntoView === 'function') {
+                panelMetricas.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            }
             // Vista local con landmarks para reproducir el video analizado en el navegador.
             if (window.futbolLandmarksPreview && typeof window.futbolLandmarksPreview.setVideoBlob === 'function') {
                 window.futbolLandmarksPreview.setVideoBlob(videoNormalizado);
@@ -453,17 +458,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 );
             }
 
-            // Mensaje de estado del postproceso ML de balón, si se solicitó.
-            if (resultado && resultado.balon_ml && getUsarMlBalon()) {
-                const b = resultado.balon_ml;
-                if (b.status === 'ok') {
-                    mostrarToast(`Analisis completado. ML balón: ${b.detecciones || 0} detecciones.`, 'success');
-                } else {
-                    mostrarToast(`Analisis completado. ML balón no disponible (${b.reason || 'sin detalle'}).`, 'warn', 3200);
-                }
-            } else {
-                mostrarToast('Analisis completado', 'success');
-            }
+            mostrarToast('Analisis completado', 'success');
         } catch (error) {
             if (seq === analisisSeq) {
                 mostrarToast(error.message || 'Error al procesar el video.', 'error');
